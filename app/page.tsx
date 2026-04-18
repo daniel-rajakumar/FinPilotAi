@@ -5,8 +5,9 @@ import Link from 'next/link'
 import {
   BarChart3,
   MessageSquare,
-  Star,
+  Newspaper,
   Settings,
+  Landmark,
   X,
   Send,
   Aperture
@@ -87,12 +88,12 @@ export default function ChatDashboard() {
               <MessageSquare size={22} strokeWidth={1.5} />
             </div>
           </Link>
-          <button className="icon-btn">
-            <Star size={22} strokeWidth={1.5} />
-          </button>
-          <button className="icon-btn">
-            <Settings size={22} strokeWidth={1.5} />
-          </button>
+          <Link href="/news" className="icon-btn" title="News">
+            <Newspaper size={22} strokeWidth={1.5} />
+          </Link>
+          <Link href="/economy" className="icon-btn" title="Economy">
+            <Landmark size={22} strokeWidth={1.5} />
+          </Link>
         </div>
         
         <div className="sidebar-bottom">

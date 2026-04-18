@@ -7,7 +7,7 @@ import {
   ResponsiveContainer
 } from 'recharts'
 import {
-  BarChart3, MessageSquare, Star, Settings
+  BarChart3, MessageSquare, Newspaper, Settings, Landmark
 } from 'lucide-react'
 import { StockQuote } from '@/lib/yfinance'
 
@@ -80,12 +80,12 @@ export default function GraphsPage() {
           <Link href="/" className="icon-btn" title="Chat">
             <MessageSquare size={22} strokeWidth={1.5} />
           </Link>
-          <button className="icon-btn">
-            <Star size={22} strokeWidth={1.5} />
-          </button>
-          <button className="icon-btn">
-            <Settings size={22} strokeWidth={1.5} />
-          </button>
+          <Link href="/news" className="icon-btn" title="News">
+            <Newspaper size={22} strokeWidth={1.5} />
+          </Link>
+          <Link href="/economy" className="icon-btn" title="Economy">
+            <Landmark size={22} strokeWidth={1.5} />
+          </Link>
         </div>
         <div className="sidebar-bottom">
           <button className="icon-btn">
