@@ -75,11 +75,17 @@ Important rules:
 
 export async function chatWithAI(
   messages: ChatMessage[],
-  ticker?: string
+  ticker?: string,
+  stockContext?: string
 ): Promise<ChatMessage> {
-  const systemPrompt = ticker 
-    ? `You are FinPilotAI, a expert financial analyst bot. You are currently analyzing the stock ${ticker}. Provide helpful, accurate, and cautious financial insights based on the user's questions. Always remind the user that this is not financial advice.`
-    : `You are FinPilotAI, a expert financial analyst bot. Help the user with stock research, market analysis, and general financial questions. Be concise and professional.`;
+  let systemPrompt = ticker 
+    ? `You are FinPilotAI, an expert financial analyst bot. You are currently analyzing the stock ${ticker}. Provide helpful, accurate, and cautious financial insights based on the user's questions. Always remind the user that this is not financial advice.`
+    : `You are FinPilotAI, an expert financial analyst bot. Help the user with stock research, market analysis, and general financial questions. Be concise and professional. Always remind the user that this is not financial advice.`;
+
+  // Inject live stock data if available
+  if (stockContext) {
+    systemPrompt += `\n\nYou have access to the following LIVE market data. Use this data to give accurate, data-driven responses. Reference specific numbers from this data in your answers:\n\n${stockContext}`
+  }
 
   try {
     const formattedMessages = [

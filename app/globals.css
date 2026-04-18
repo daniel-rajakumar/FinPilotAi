@@ -379,3 +379,256 @@ body {
 .send-btn:hover svg {
   stroke: #1c1c1e;
 }
+
+/* ==================== GRAPHS PAGE ==================== */
+.graphs-container {
+  flex: 1;
+  padding: 40px 48px;
+  overflow-y: auto;
+  max-height: 100vh;
+  background: var(--main-bg);
+}
+
+.graphs-header {
+  margin-bottom: 32px;
+}
+
+.graphs-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1c1c1e;
+  margin-bottom: 4px;
+}
+
+.graphs-subtitle {
+  font-size: 14px;
+  color: #8e8e93;
+}
+
+/* Search */
+.graph-search {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.graph-search-input {
+  flex: 1;
+  padding: 14px 20px;
+  background: #f0f0f5;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  font-size: 15px;
+  color: #1c1c1e;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.graph-search-input:focus {
+  border-color: #d1d1d6;
+}
+
+.graph-search-btn {
+  padding: 14px 28px;
+  background: #1c1c1e;
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+
+.graph-search-btn:hover { background: #333; }
+.graph-search-btn:disabled { background: #999; cursor: not-allowed; }
+
+/* Quick Picks */
+.quick-picks {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.quick-pick-btn {
+  padding: 8px 16px;
+  background: #fff;
+  border: 1px solid #e5e5ea;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1c1c1e;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.quick-pick-btn:hover { background: #f5f5f7; }
+.quick-pick-btn.active {
+  background: #1c1c1e;
+  color: #fff;
+  border-color: #1c1c1e;
+}
+
+/* Stock Card */
+.stock-card {
+  background: #fff;
+  border: 1px solid #e5e5ea;
+  border-radius: 20px;
+  padding: 32px;
+  margin-bottom: 24px;
+}
+
+.stock-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.stock-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1c1c1e;
+  margin-bottom: 2px;
+}
+
+.stock-symbol {
+  font-size: 14px;
+  color: #8e8e93;
+  font-weight: 500;
+}
+
+.stock-price-block { text-align: right; }
+
+.stock-price {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1c1c1e;
+  display: block;
+}
+
+.stock-change {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stock-change.positive { color: #16a34a; }
+.stock-change.negative { color: #dc2626; }
+
+/* Period Toggles */
+.period-toggles {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.period-btn {
+  padding: 6px 16px;
+  background: #f0f0f5;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.period-btn:hover { background: #e5e5ea; }
+.period-btn.active {
+  background: #1c1c1e;
+  color: #fff;
+}
+
+/* Chart */
+.chart-container {
+  margin-bottom: 32px;
+}
+
+.no-data {
+  text-align: center;
+  color: #8e8e93;
+  padding: 60px 0;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.stat-item {
+  background: #f9f9fb;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.stat-label {
+  display: block;
+  font-size: 12px;
+  color: #8e8e93;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.stat-value {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1c1c1e;
+}
+
+/* Watchlist */
+.watchlist-section {
+  margin-top: 24px;
+}
+
+.watchlist-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1c1c1e;
+  margin-bottom: 16px;
+}
+
+.watchlist-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.watchlist-card {
+  background: #fff;
+  border: 1px solid #e5e5ea;
+  border-radius: 16px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: inherit;
+}
+
+.watchlist-card:hover {
+  border-color: #1c1c1e;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.watchlist-ticker {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1c1c1e;
+}
+
+.watchlist-action {
+  font-size: 13px;
+  color: #8e8e93;
+}

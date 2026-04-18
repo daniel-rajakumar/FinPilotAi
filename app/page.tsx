@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import {
-  LayoutGrid,
+  BarChart3,
   MessageSquare,
   Star,
   Settings,
@@ -18,22 +19,6 @@ export default function ChatDashboard() {
   const [isLoading, setIsLoading] = useState(false)
   
   const scrollRef = useRef<HTMLDivElement>(null)
-
-  // Load chat history from /data/chats.json on mount
-  useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const response = await fetch('/api/data/chat')
-        const data = await response.json()
-        if (Array.isArray(data)) {
-          setMessages(data)
-        }
-      } catch (err) {
-        console.error('Failed to load history:', err)
-      }
-    }
-    loadHistory()
-  }, [])
 
   // Auto-save history whenever messages change
   useEffect(() => {
@@ -94,14 +79,14 @@ export default function ChatDashboard() {
       {/* Sidebar - Same as before */}
       <aside className="sidebar">
         <div className="sidebar-top">
-          <button className="icon-btn">
-            <LayoutGrid size={22} strokeWidth={1.5} />
-          </button>
-          <button className="icon-btn active">
+          <Link href="/graphs" className="icon-btn" title="Graphs">
+            <BarChart3 size={22} strokeWidth={1.5} />
+          </Link>
+          <Link href="/" className="icon-btn active" title="Chat">
             <div className="active-bg">
               <MessageSquare size={22} strokeWidth={1.5} />
             </div>
-          </button>
+          </Link>
           <button className="icon-btn">
             <Star size={22} strokeWidth={1.5} />
           </button>

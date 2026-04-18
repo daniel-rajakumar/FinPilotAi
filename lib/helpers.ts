@@ -36,11 +36,11 @@ export function getSentimentColor(sentiment: string): string {
 export function getSentimentEmoji(sentiment: string): string {
   switch (sentiment) {
     case 'Bullish':
-      return '📈'
+      return '🟢'
     case 'Bearish':
-      return '📉'
+      return '🔴'
     case 'Neutral':
-      return '➡️'
+      return '🟡'
     default:
       return '❓'
   }
