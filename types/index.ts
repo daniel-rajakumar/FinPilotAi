@@ -17,5 +17,20 @@ export interface AnalysisResult {
 export interface AnalyzeRequest {
   ticker: string
 }
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  id: string
+  timestamp: string
+}
+
+export interface ChatRequest {
+  messages: ChatMessage[]
+  ticker?: string
+}
+
+export interface ChatResponse {
+  message: ChatMessage
+}
 
 export interface AnalyzeResponse extends AnalysisResult {}

@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { NewsArticle, AnalysisResult } from '@/types'
+import { NewsArticle, AnalysisResult, ChatMessage } from '@/types'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || '',
@@ -70,5 +70,48 @@ Important rules:
       headlines,
       ticker: ticker.toUpperCase(),
     }
+  }
+}
+
+export async function chatWithAI(
+  messages: ChatMessage[],
+  ticker?: string
+): Promise<ChatMessage> {
+  const systemPrompt = ticker 
+    ? `You are FinPilotAI, a expert financial analyst bot. You are currently analyzing the stock ${ticker}. Provide helpful, accurate, and cautious financial insights based on the user's questions. Always remind the user that this is not financial advice.`
+    : `You are FinPilotAI, a expert financial analyst bot. Help the user with stock research, market analysis, and general financial questions. Be concise and professional.`;
+
+  try {
+    const formattedMessages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...messages.map(m => ({
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content
+      }))
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: formattedMessages,
+      temperature: 0.7,
+      max_tokens: 1000,
+    });
+
+    const content = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that request.";
+
+    return {
+      id: Math.random().toString(36).substring(7),
+      role: 'assistant',
+      content,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error) {
+    console.error('Chat API failed:', error);
+    return {
+      id: Math.random().toString(36).substring(7),
+      role: 'assistant',
+      content: "I'm having trouble connecting to my brain right now. Please check your API keys or try again later.",
+      timestamp: new Date().toISOString()
+    };
   }
 }
