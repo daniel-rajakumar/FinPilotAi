@@ -143,10 +143,10 @@ export default function ChatDashboard() {
                 <div className="prompts-section">
                   <p className="prompts-label">Try these prompts:</p>
                   <div className="prompts-grid">
-                    <button onClick={() => handlePromptClick("I need assistance with my account.")} className="prompt-btn">I need assistance with my account.</button>
-                    <button onClick={() => handlePromptClick("Recommend a good restaurant nearby.")} className="prompt-btn">Recommend a good restaurant nearby.</button>
-                    <button onClick={() => handlePromptClick("How do I reset my password?")} className="prompt-btn">How do I reset my password?</button>
-                    <button onClick={() => handlePromptClick("What's the weather like today?")} className="prompt-btn">What&#39;s the weather like today?</button>
+                    <button onClick={() => handlePromptClick("What's happening with NVDA stock today?")} className="prompt-btn">What's happening with NVDA stock today?</button>
+                    <button onClick={() => handlePromptClick("Compare AAPL and MSFT performance this month.")} className="prompt-btn">Compare AAPL and MSFT performance this month.</button>
+                    <button onClick={() => handlePromptClick("Is TSLA a good buy right now?")} className="prompt-btn">Is TSLA a good buy right now?</button>
+                    <button onClick={() => handlePromptClick("Explain what a P/E ratio means.")} className="prompt-btn">Explain what a P/E ratio means.</button>
                   </div>
                 </div>
               </div>
