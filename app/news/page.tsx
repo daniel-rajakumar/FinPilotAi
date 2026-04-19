@@ -1,13 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import {
-  BarChart3, MessageSquare, Settings, Landmark,
   Newspaper, ExternalLink, Clock, Search,
   TrendingUp, TrendingDown, Flame, Zap
 } from 'lucide-react'
 import CompanyLogo from '@/components/CompanyLogo'
+import AppSidebar from '@/components/AppSidebar'
+import PageHeaderIcon from '@/components/PageHeaderIcon'
 
 interface NewsArticle {
   title: string
@@ -127,16 +127,22 @@ export default function NewsPage() {
   }
 
   const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'Date unavailable'
+
     const date = new Date(dateStr)
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60))
-    
-    if (diffHrs < 1) return 'Just now'
-    if (diffHrs < 24) return `${diffHrs}h ago`
-    const diffDays = Math.floor(diffHrs / 24)
-    if (diffDays < 7) return `${diffDays}d ago`
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    if (Number.isNaN(date.getTime())) {
+      return 'Date unavailable'
+    }
+
+    return date.toLocaleString('en-US', {
+      weekday: 'short',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    })
   }
 
   // Determine which articles to show
@@ -146,38 +152,7 @@ export default function NewsPage() {
 
   return (
     <div className="app-container">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <Link href="/graphs" className="icon-btn" title="Graphs">
-            <BarChart3 size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/" className="icon-btn" title="Chat">
-            <MessageSquare size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/news" className="icon-btn active" title="News">
-            <div className="active-bg">
-              <Newspaper size={22} strokeWidth={1.5} />
-            </div>
-          </Link>
-          <Link href="/options" className="icon-btn" title="Option Flow">
-            <Zap size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/economy" className="icon-btn" title="Economy">
-            <Landmark size={22} strokeWidth={1.5} />
-          </Link>
-        </div>
-        <div className="sidebar-bottom">
-          <Link href="/settings" className="icon-btn" title="Settings">
-            <Settings size={22} strokeWidth={1.5} />
-          </Link>
-          <button className="avatar-btn">
-            <div className="avatar">
-              <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
-            </div>
-          </button>
-        </div>
-      </aside>
+      <AppSidebar active="news" />
 
       {/* Main Area */}
       <main className="main-area">
@@ -185,7 +160,7 @@ export default function NewsPage() {
           {/* Header */}
           <div className="news-header">
             <div className="news-header-title">
-              <Newspaper size={28} strokeWidth={1.5} />
+              <PageHeaderIcon icon={Newspaper} />
               <h1>Market News</h1>
             </div>
             <p className="news-subtitle">Stay updated with the latest financial headlines</p>

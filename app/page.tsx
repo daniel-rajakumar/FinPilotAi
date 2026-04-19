@@ -1,17 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip,
   ResponsiveContainer
 } from 'recharts'
 import {
-  BarChart3,
-  MessageSquare,
-  Newspaper,
-  Settings,
-  Landmark,
   X,
   Send,
   Aperture,
@@ -28,6 +22,7 @@ import { ChatMessage } from '@/types'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
 import CompanyLogo from '@/components/CompanyLogo'
+import AppSidebar from '@/components/AppSidebar'
 
 interface MiniStockData {
   quote: {
@@ -42,6 +37,11 @@ interface MiniStockData {
     marketCap: number
   } | null
   history: { date: string; close: number }[]
+}
+
+interface VoiceQueueItem {
+  audioUrl: string
+  text: string
 }
 
 const PERIOD_OPTIONS = [
@@ -271,8 +271,9 @@ export default function ChatDashboard() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   // SSE TTS Queue Engine
-  const audioQueueRef = useRef<string[]>([])
+  const audioQueueRef = useRef<VoiceQueueItem[]>([])
   const isPlayingAudioRef = useRef(false)
+  const captionProgressTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Full Screen Voice states
   const [isFullScreenVoice, setIsFullScreenVoice] = useState(false)
@@ -281,6 +282,8 @@ export default function ChatDashboard() {
   const [voiceOrigin, setVoiceOrigin] = useState({ x: '50%', y: '85%' })
   const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle')
   const [voiceTranscript, setVoiceTranscript] = useState('')
+  const [voiceCaption, setVoiceCaption] = useState('')
+  const [activeCaptionWordIndex, setActiveCaptionWordIndex] = useState(0)
   const voiceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -353,56 +356,110 @@ export default function ChatDashboard() {
     }
   }
 
+  const clearVoiceCaptionProgress = () => {
+    if (captionProgressTimerRef.current) {
+      clearInterval(captionProgressTimerRef.current)
+      captionProgressTimerRef.current = null
+    }
+  }
+
+  const sanitizeSpeechText = (text: string) => text.replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim()
+
+  const startCaptionProgress = (text: string, audio: HTMLAudioElement) => {
+    const words = text.split(/\s+/).filter(Boolean)
+    setVoiceCaption(text)
+    setActiveCaptionWordIndex(0)
+
+    clearVoiceCaptionProgress()
+
+    if (words.length === 0) {
+      return
+    }
+
+    const updateWordIndex = () => {
+      const duration = audio.duration
+      const currentTime = audio.currentTime
+
+      if (!duration || !Number.isFinite(duration) || duration <= 0) {
+        return
+      }
+
+      const progress = Math.min(Math.max(currentTime / duration, 0), 0.999)
+      const nextIndex = Math.min(words.length - 1, Math.floor(progress * words.length))
+      setActiveCaptionWordIndex(nextIndex)
+    }
+
+    audio.onloadedmetadata = updateWordIndex
+    audio.ontimeupdate = updateWordIndex
+
+    captionProgressTimerRef.current = setInterval(updateWordIndex, 80)
+  }
+
   const playNextInQueue = () => {
     if (!isVoiceActiveRef.current) {
-      audioQueueRef.current.forEach(url => URL.revokeObjectURL(url));
-      audioQueueRef.current = [];
-      return;
+      audioQueueRef.current.forEach(item => URL.revokeObjectURL(item.audioUrl))
+      audioQueueRef.current = []
+      clearVoiceCaptionProgress()
+      setVoiceCaption('')
+      setActiveCaptionWordIndex(0)
+      return
     }
 
     if (audioQueueRef.current.length === 0) {
-      isPlayingAudioRef.current = false;
-      return;
+      isPlayingAudioRef.current = false
+      clearVoiceCaptionProgress()
+      setVoiceCaption('')
+      setActiveCaptionWordIndex(0)
+      return
     }
 
-    isPlayingAudioRef.current = true;
-    const audioUrl = audioQueueRef.current.shift()!;
+    isPlayingAudioRef.current = true
+    const queueItem = audioQueueRef.current.shift()!
     
-    if (!audioRef.current) audioRef.current = new Audio();
-    audioRef.current.pause();
-    audioRef.current.src = audioUrl;
+    if (!audioRef.current) audioRef.current = new Audio()
+    audioRef.current.pause()
+    audioRef.current.src = queueItem.audioUrl
+    startCaptionProgress(queueItem.text, audioRef.current)
     audioRef.current.onended = () => {
-      URL.revokeObjectURL(audioUrl);
-      playNextInQueue();
-    };
+      clearVoiceCaptionProgress()
+      URL.revokeObjectURL(queueItem.audioUrl)
+      playNextInQueue()
+    }
     audioRef.current.play().catch((err) => {
-      console.error('Audio playback rejected:', err);
-      URL.revokeObjectURL(audioUrl);
-      playNextInQueue();
-    });
+      console.error('Audio playback rejected:', err)
+      clearVoiceCaptionProgress()
+      URL.revokeObjectURL(queueItem.audioUrl)
+      playNextInQueue()
+    })
   }
 
   const enqueueVoiceChunk = async (sentence: string) => {
-    if (!isVoiceActiveRef.current) return;
-    setVoiceState('speaking');
+    if (!isVoiceActiveRef.current) return
+    setVoiceState('speaking')
     try {
+      const cleanSentence = sanitizeSpeechText(sentence)
+      if (!cleanSentence) return
+
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: sentence.replace(/[*_#`]/g, '').trim() })
-      });
-      if (!res.ok) throw new Error('TTS Failed');
-      const blob = await res.blob();
-      if (!isVoiceActiveRef.current) return;
+        body: JSON.stringify({ text: cleanSentence })
+      })
+      if (!res.ok) throw new Error('TTS Failed')
+      const blob = await res.blob()
+      if (!isVoiceActiveRef.current) return
       
-      const audioUrl = URL.createObjectURL(blob);
-      audioQueueRef.current.push(audioUrl);
+      const audioUrl = URL.createObjectURL(blob)
+      audioQueueRef.current.push({
+        audioUrl,
+        text: cleanSentence,
+      })
       
       if (!isPlayingAudioRef.current) {
-        playNextInQueue();
+        playNextInQueue()
       }
     } catch (e) {
-      console.error(e);
+      console.error(e)
     }
   }
 
@@ -440,10 +497,15 @@ export default function ChatDashboard() {
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.src = ''
+      audioRef.current.ontimeupdate = null
+      audioRef.current.onloadedmetadata = null
     }
-    audioQueueRef.current.forEach(url => URL.revokeObjectURL(url));
-    audioQueueRef.current = [];
-    isPlayingAudioRef.current = false;
+    audioQueueRef.current.forEach(item => URL.revokeObjectURL(item.audioUrl))
+    audioQueueRef.current = []
+    isPlayingAudioRef.current = false
+    clearVoiceCaptionProgress()
+    setVoiceCaption('')
+    setActiveCaptionWordIndex(0)
     if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current)
   }
 
@@ -641,39 +703,7 @@ export default function ChatDashboard() {
 
   return (
     <div className="app-container">
-      {/* Sidebar - Same as before */}
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <Link href="/graphs" className="icon-btn" title="Graphs">
-            <BarChart3 size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/" className="icon-btn active" title="Chat">
-            <div className="active-bg">
-              <MessageSquare size={22} strokeWidth={1.5} />
-            </div>
-          </Link>
-          <Link href="/news" className="icon-btn" title="News">
-            <Newspaper size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/options" className="icon-btn" title="Option Flow">
-            <Zap size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/economy" className="icon-btn" title="Economy">
-            <Landmark size={22} strokeWidth={1.5} />
-          </Link>
-        </div>
-        
-        <div className="sidebar-bottom">
-          <Link href="/settings" className="icon-btn" title="Settings">
-            <Settings size={22} strokeWidth={1.5} />
-          </Link>
-          <button className="avatar-btn">
-            <div className="avatar">
-               <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
-            </div>
-          </button>
-        </div>
-      </aside>
+      <AppSidebar active="chat" />
 
       {/* Main Content Area */}
       <main className="main-area">
@@ -818,11 +848,43 @@ export default function ChatDashboard() {
 
             <div className="voice-transcript">
               {voiceState === 'listening' ? voiceTranscript : ''}
-              {voiceState === 'speaking' && messages.length > 0 ? messages[messages.length - 1].content : ''}
+              {voiceState === 'speaking' ? (
+                <VoiceCaption
+                  text={voiceCaption}
+                  activeWordIndex={activeCaptionWordIndex}
+                />
+              ) : null}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+function VoiceCaption({
+  text,
+  activeWordIndex,
+}: {
+  text: string
+  activeWordIndex: number
+}) {
+  if (!text) {
+    return <span className="voice-caption-placeholder">Preparing caption...</span>
+  }
+
+  const parts = text.match(/\S+\s*/g) ?? [text]
+
+  return (
+    <span className="voice-caption-text" aria-live="polite">
+      {parts.map((part, index) => (
+        <span
+          key={`${part}-${index}`}
+          className={index === activeWordIndex ? 'voice-caption-word active' : 'voice-caption-word'}
+        >
+          {part}
+        </span>
+      ))}
+    </span>
   )
 }

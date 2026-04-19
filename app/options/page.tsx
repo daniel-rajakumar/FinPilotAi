@@ -1,14 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from 'react'
-import Link from 'next/link'
 import {
-  BarChart3, MessageSquare, Settings, Landmark,
-  Newspaper, Zap, TrendingUp, TrendingDown, Clock,
+  Zap, TrendingUp, TrendingDown, Clock,
   ArrowUpRight, ArrowDownRight, Info
 } from 'lucide-react'
 import { OptionFlowData, OptionFlowTicker } from '@/lib/option-flow'
 import CompanyLogo from '@/components/CompanyLogo'
+import AppSidebar from '@/components/AppSidebar'
+import PageHeaderIcon from '@/components/PageHeaderIcon'
 
 export default function OptionFlowPage() {
   const [data, setData] = useState<OptionFlowData | null>(null)
@@ -61,40 +61,9 @@ export default function OptionFlowPage() {
     )
   }
 
-  return (
+    return (
     <div className="app-container">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <Link href="/graphs" className="icon-btn" title="Graphs">
-            <BarChart3 size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/" className="icon-btn" title="Chat">
-            <MessageSquare size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/news" className="icon-btn" title="News">
-            <Newspaper size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/options" className="icon-btn active" title="Option Flow">
-            <div className="active-bg">
-              <Zap size={22} strokeWidth={1.5} />
-            </div>
-          </Link>
-          <Link href="/economy" className="icon-btn" title="Economy">
-            <Landmark size={22} strokeWidth={1.5} />
-          </Link>
-        </div>
-        <div className="sidebar-bottom">
-          <Link href="/settings" className="icon-btn" title="Settings">
-            <Settings size={22} strokeWidth={1.5} />
-          </Link>
-          <button className="avatar-btn">
-            <div className="avatar">
-              <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
-            </div>
-          </button>
-        </div>
-      </aside>
+      <AppSidebar active="options" />
 
       {/* Main Area */}
       <main className="main-area">
@@ -102,9 +71,7 @@ export default function OptionFlowPage() {
           {/* Header */}
           <div className="options-header">
             <div className="options-header-title">
-              <div className="zap-icon-wrapper">
-                <Zap size={28} fill="currentColor" />
-              </div>
+              <PageHeaderIcon icon={Zap} />
               <h1>Option Flow</h1>
               <div className="live-indicator">
                 <span className="live-dot"></span>
@@ -246,9 +213,13 @@ export default function OptionFlowPage() {
 
       <style jsx>{`
         .options-container {
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
           padding: 2rem;
           max-width: 1400px;
           margin: 0 auto;
+          width: 100%;
         }
         
         .options-header {

@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState, useEffect } from 'react'
-import Link from 'next/link'
 import {
-  BarChart3, MessageSquare, Newspaper, Settings, Landmark,
-  Sun, Moon, Monitor, ChevronRight, Zap
+  Settings, Sun, Moon, Monitor, ChevronRight
 } from 'lucide-react'
 import { useTheme } from '@/components/ThemeProvider'
+import AppSidebar from '@/components/AppSidebar'
+import PageHeaderIcon from '@/components/PageHeaderIcon'
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
@@ -30,45 +30,19 @@ export default function SettingsPage() {
 
   return (
     <div className="app-container">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <Link href="/graphs" className="icon-btn" title="Graphs">
-            <BarChart3 size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/" className="icon-btn" title="Chat">
-            <MessageSquare size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/news" className="icon-btn" title="News">
-            <Newspaper size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/options" className="icon-btn" title="Option Flow">
-            <Zap size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/economy" className="icon-btn" title="Economy">
-            <Landmark size={22} strokeWidth={1.5} />
-          </Link>
-        </div>
-        <div className="sidebar-bottom">
-          <Link href="/settings" className="icon-btn active" title="Settings">
-            <div className="active-bg">
-              <Settings size={22} strokeWidth={1.5} />
-            </div>
-          </Link>
-          <button className="avatar-btn">
-            <div className="avatar">
-               <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
-            </div>
-          </button>
-        </div>
-      </aside>
+      <AppSidebar active="settings" />
 
       {/* Main Content Area */}
       <main className="main-area">
         <div className="settings-container">
           <div className="settings-header">
-            <h1 className="settings-title">Settings</h1>
-            <p className="settings-subtitle">Customize your FinPilotAI experience</p>
+            <div className="settings-header-title">
+              <PageHeaderIcon icon={Settings} />
+              <div>
+                <h1 className="settings-title">Settings</h1>
+                <p className="settings-subtitle">Customize your FinPilotAI experience</p>
+              </div>
+            </div>
           </div>
 
           {/* Appearance Section */}

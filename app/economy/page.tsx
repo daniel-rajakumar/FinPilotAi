@@ -1,18 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react'
-import Link from 'next/link'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
 } from 'recharts'
 import {
-  BarChart3, MessageSquare, Newspaper, Settings,
   Landmark, TrendingUp, TrendingDown, RefreshCw, ChevronDown,
   Info, CalendarDays, AlertTriangle, Lightbulb, ChevronRight,
   Calendar, Clock, Zap
 } from 'lucide-react'
 import { getEventsForWeek, getWeekRangeForOffset, type EconEvent } from '@/lib/econ-calendar'
+import AppSidebar from '@/components/AppSidebar'
+import PageHeaderIcon from '@/components/PageHeaderIcon'
 
 interface Observation {
   date: string
@@ -212,38 +212,7 @@ export default function EconomyPage() {
 
   return (
     <div className="app-container">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <Link href="/graphs" className="icon-btn" title="Graphs">
-            <BarChart3 size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/" className="icon-btn" title="Chat">
-            <MessageSquare size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/news" className="icon-btn" title="News">
-            <Newspaper size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/options" className="icon-btn" title="Option Flow">
-            <Zap size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/economy" className="icon-btn active" title="Economy">
-            <div className="active-bg">
-              <Landmark size={22} strokeWidth={1.5} />
-            </div>
-          </Link>
-        </div>
-        <div className="sidebar-bottom">
-          <Link href="/settings" className="icon-btn" title="Settings">
-            <Settings size={22} strokeWidth={1.5} />
-          </Link>
-          <button className="avatar-btn">
-            <div className="avatar">
-              <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
-            </div>
-          </button>
-        </div>
-      </aside>
+      <AppSidebar active="economy" />
 
       {/* Main Area */}
       <main className="main-area">
@@ -251,7 +220,7 @@ export default function EconomyPage() {
           {/* Header */}
           <div className="econ-header">
             <div className="econ-header-title">
-              <Landmark size={28} strokeWidth={1.5} />
+              <PageHeaderIcon icon={Landmark} />
               <h1>Economic Dashboard</h1>
             </div>
             <p className="econ-subtitle">Key macroeconomic indicators from the Federal Reserve (FRED)</p>

@@ -1,18 +1,19 @@
 "use client";
 
 import React, { useState, useCallback, useEffect } from 'react'
-import Link from 'next/link'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer
 } from 'recharts'
 import {
-  BarChart3, MessageSquare, Newspaper, Settings, Landmark,
+  BarChart3, Newspaper,
   ArrowLeft, Cpu, ShoppingBag, Banknote, HeartPulse, CircuitBoard, Flame,
   TrendingUp, TrendingDown, ExternalLink, Clock, Zap
 } from 'lucide-react'
 import { StockQuote } from '@/lib/yfinance'
 import CompanyLogo from '@/components/CompanyLogo'
+import AppSidebar from '@/components/AppSidebar'
+import PageHeaderIcon from '@/components/PageHeaderIcon'
 
 interface StockHistory {
   date: string
@@ -326,38 +327,7 @@ export default function GraphsPage() {
 
   return (
     <div className="app-container">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="sidebar-top">
-          <Link href="/graphs" className="icon-btn active" title="Graphs">
-            <div className="active-bg">
-              <BarChart3 size={22} strokeWidth={1.5} />
-            </div>
-          </Link>
-          <Link href="/" className="icon-btn" title="Chat">
-            <MessageSquare size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/news" className="icon-btn" title="News">
-            <Newspaper size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/options" className="icon-btn" title="Option Flow">
-            <Zap size={22} strokeWidth={1.5} />
-          </Link>
-          <Link href="/economy" className="icon-btn" title="Economy">
-            <Landmark size={22} strokeWidth={1.5} />
-          </Link>
-        </div>
-        <div className="sidebar-bottom">
-          <Link href="/settings" className="icon-btn" title="Settings">
-            <Settings size={22} strokeWidth={1.5} />
-          </Link>
-          <button className="avatar-btn">
-            <div className="avatar">
-              <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
-            </div>
-          </button>
-        </div>
-      </aside>
+      <AppSidebar active="graphs" />
 
       {/* Main Area */}
       <main className="main-area">
@@ -370,13 +340,15 @@ export default function GraphsPage() {
                   <ArrowLeft size={18} />
                 </button>
               )}
-              <div>
+              <div className="graphs-header-copy">
+                <PageHeaderIcon icon={BarChart3} />
+                <div>
                 <h1 className="graphs-title">
                   {data?.quote
                     ? `${data.quote.name}`
                     : activeSector
                     ? `${activeSector.name}`
-                    : '📊 Live Market Charts'}
+                    : 'Live Market Charts'}
                 </h1>
                 <p className="graphs-subtitle">
                   {data?.quote
@@ -385,6 +357,7 @@ export default function GraphsPage() {
                     ? `Browse ${activeSector.name} stocks`
                     : 'Select a sector to explore stocks'}
                 </p>
+                </div>
               </div>
             </div>
           </div>

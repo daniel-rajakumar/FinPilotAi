@@ -1,10 +1,13 @@
 import YahooFinance from 'yahoo-finance2'
 
-const yahooFinance = new YahooFinance()
+const yahooFinance = new YahooFinance({
+  suppressNotices: ['yahooSurvey'],
+})
 
 export interface StockQuote {
   symbol: string
   name: string
+  quoteType: string | null
   price: number
   change: number
   changePercent: number
@@ -24,30 +27,75 @@ export interface StockHistory {
   close: number
 }
 
+interface QuoteResult {
+  symbol: string
+  shortName?: string
+  longName?: string
+  quoteType?: string
+  regularMarketPrice?: number
+  regularMarketChange?: number
+  regularMarketChangePercent?: number
+  regularMarketPreviousClose?: number
+  regularMarketOpen?: number
+  regularMarketDayHigh?: number
+  regularMarketDayLow?: number
+  regularMarketVolume?: number
+  marketCap?: number | null
+  fiftyTwoWeekHigh?: number
+  fiftyTwoWeekLow?: number
+  currency?: string
+}
+
+interface HistoricalQuote {
+  date: Date
+  close?: number | null
+}
+
+function mapQuoteResult(result: QuoteResult, fallbackSymbol: string): StockQuote {
+  return {
+    symbol: result.symbol,
+    name: result.shortName || result.longName || fallbackSymbol,
+    quoteType: result.quoteType ?? null,
+    price: result.regularMarketPrice ?? 0,
+    change: result.regularMarketChange ?? 0,
+    changePercent: result.regularMarketChangePercent ?? 0,
+    previousClose: result.regularMarketPreviousClose ?? 0,
+    open: result.regularMarketOpen ?? 0,
+    dayHigh: result.regularMarketDayHigh ?? 0,
+    dayLow: result.regularMarketDayLow ?? 0,
+    volume: result.regularMarketVolume ?? 0,
+    marketCap: result.marketCap ?? null,
+    fiftyTwoWeekHigh: result.fiftyTwoWeekHigh ?? 0,
+    fiftyTwoWeekLow: result.fiftyTwoWeekLow ?? 0,
+    currency: result.currency || 'USD',
+  }
+}
+
 // Fetch real-time stock quote
 export async function getStockQuote(symbol: string): Promise<StockQuote | null> {
   try {
-    const result: any = await yahooFinance.quote(symbol.toUpperCase())
+    const result = await yahooFinance.quote(symbol.toUpperCase()) as QuoteResult
 
-    return {
-      symbol: result.symbol,
-      name: result.shortName || result.longName || symbol,
-      price: result.regularMarketPrice ?? 0,
-      change: result.regularMarketChange ?? 0,
-      changePercent: result.regularMarketChangePercent ?? 0,
-      previousClose: result.regularMarketPreviousClose ?? 0,
-      open: result.regularMarketOpen ?? 0,
-      dayHigh: result.regularMarketDayHigh ?? 0,
-      dayLow: result.regularMarketDayLow ?? 0,
-      volume: result.regularMarketVolume ?? 0,
-      marketCap: result.marketCap ?? null,
-      fiftyTwoWeekHigh: result.fiftyTwoWeekHigh ?? 0,
-      fiftyTwoWeekLow: result.fiftyTwoWeekLow ?? 0,
-      currency: result.currency || 'USD',
-    }
+    return mapQuoteResult(result, symbol)
   } catch (error) {
     console.error(`Failed to fetch quote for ${symbol}:`, error)
     return null
+  }
+}
+
+export async function getStockQuotes(symbols: string[]): Promise<StockQuote[]> {
+  if (symbols.length === 0) {
+    return []
+  }
+
+  try {
+    const uniqueSymbols = [...new Set(symbols.map((symbol) => symbol.toUpperCase()))]
+    const results = await yahooFinance.quote(uniqueSymbols) as QuoteResult[]
+
+    return results.map((result) => mapQuoteResult(result, result.symbol))
+  } catch (error) {
+    console.error(`Failed to fetch batch quotes for ${symbols.join(', ')}:`, error)
+    return []
   }
 }
 
@@ -58,13 +106,13 @@ export async function getStockHistory(symbol: string, days: number = 30): Promis
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - days)
 
-    const result: any[] = await yahooFinance.historical(symbol.toUpperCase(), {
+    const result = await yahooFinance.historical(symbol.toUpperCase(), {
       period1: startDate,
       period2: endDate,
       interval: '1d',
-    })
+    }) as HistoricalQuote[]
 
-    return result.map((item: any) => ({
+    return result.map((item) => ({
       date: item.date.toISOString().split('T')[0],
       close: item.close ?? 0,
     }))

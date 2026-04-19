@@ -13,6 +13,8 @@ export interface NewsResponse {
 
 export async function fetchNews(ticker: string): Promise<NewsArticle[]> {
   try {
+    const isGeneralMarketQuery = isGeneralMarketNewsQuery(ticker)
+
     const [newsApiArticles, finnhubArticles] = await Promise.all([
       fetchNewsAPI(ticker),
       fetchFinnhub(ticker),
@@ -30,7 +32,18 @@ export async function fetchNews(ticker: string): Promise<NewsArticle[]> {
       }
     }
 
-    return allArticles.slice(0, 5)
+    if (isGeneralMarketQuery && allArticles.length === 0) {
+      allArticles = await fetchMarketWatchTopStories()
+    }
+
+    return allArticles
+      .filter((article) => article.title && article.url)
+      .sort((a, b) => {
+        const aTime = Date.parse(a.publishedAt)
+        const bTime = Date.parse(b.publishedAt)
+        return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime)
+      })
+      .slice(0, 5)
   } catch (error) {
     console.error(`Error fetching news for ${ticker}:`, error)
     return []
@@ -70,7 +83,7 @@ async function fetchNewsAPI(ticker: string): Promise<NewsArticle[]> {
       description: getProperty(article, 'description') ? String(getProperty(article, 'description')) : null,
       url: String(getProperty(article, 'url') ?? ''),
       source: String(getProperty(getProperty(article, 'source'), 'name') ?? ''),
-      publishedAt: String(getProperty(article, 'publishedAt') ?? ''),
+      publishedAt: normalizePublishedAt(getProperty(article, 'publishedAt')),
     }))
   } catch (error) {
     console.error('Error fetching from NewsAPI:', error)
@@ -119,7 +132,7 @@ async function fetchFinnhub(ticker: string): Promise<NewsArticle[]> {
       description: getProperty(article, 'summary') ? String(getProperty(article, 'summary')) : null,
       url: String(getProperty(article, 'url') ?? ''),
       source: String(getProperty(article, 'source') ?? ''),
-      publishedAt: String(getProperty(article, 'datetime') ?? ''),
+      publishedAt: normalizePublishedAt(getProperty(article, 'datetime')),
     }))
 
     // Filter by trusted sources
@@ -140,4 +153,94 @@ function getProperty(obj: unknown, key: string): unknown {
     return (obj as Record<string, unknown>)[key]
   }
   return undefined
+}
+
+function normalizePublishedAt(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const timestamp = value < 1e12 ? value * 1000 : value
+    return new Date(timestamp).toISOString()
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return ''
+    }
+
+    if (/^\d+$/.test(trimmed)) {
+      const numeric = Number(trimmed)
+      if (Number.isFinite(numeric)) {
+        const timestamp = numeric < 1e12 ? numeric * 1000 : numeric
+        return new Date(timestamp).toISOString()
+      }
+    }
+
+    const parsed = Date.parse(trimmed)
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toISOString()
+    }
+  }
+
+  return ''
+}
+
+function isGeneralMarketNewsQuery(ticker: string): boolean {
+  const normalized = ticker.trim().toLowerCase()
+  return normalized === 'stock market' || normalized === 'market' || normalized === 'top news' || normalized === 'trending'
+}
+
+async function fetchMarketWatchTopStories(): Promise<NewsArticle[]> {
+  try {
+    const response = await fetch('https://feeds.marketwatch.com/marketwatch/topstories/', {
+      next: { revalidate: 300 },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 FinPilotAI/1.0',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`MarketWatch RSS responded with status ${response.status}`)
+    }
+
+    const xml = await response.text()
+    const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)].slice(0, 10)
+
+    return items.map((match) => {
+      const itemXml = match[1]
+
+      return {
+        title: decodeHtmlEntities(extractXmlTag(itemXml, 'title')),
+        description: decodeHtmlEntities(extractXmlTag(itemXml, 'description')) || null,
+        url: decodeHtmlEntities(extractXmlTag(itemXml, 'link')),
+        source: 'MarketWatch',
+        publishedAt: normalizePublishedAt(extractXmlTag(itemXml, 'pubDate')),
+      }
+    })
+  } catch (error) {
+    console.error('Error fetching MarketWatch top stories:', error)
+    return []
+  }
+}
+
+function extractXmlTag(xml: string, tagName: string): string {
+  const match = xml.match(new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, 'i'))
+  return match?.[1]?.trim() ?? ''
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1')
+    .replace(/&#8217;|&#x2019;/g, "'")
+    .replace(/&#8216;|&#x2018;/g, "'")
+    .replace(/&#8220;|&#x201c;/g, '"')
+    .replace(/&#8221;|&#x201d;/g, '"')
+    .replace(/&#8212;|&#x2014;/g, ' - ')
+    .replace(/&#8211;|&#x2013;/g, '-')
+    .replace(/&#169;/g, '(c)')
+    .replace(/&amp;/g, '&')
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim()
 }
