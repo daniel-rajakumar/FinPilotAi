@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
 import Link from 'next/link'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -9,7 +9,7 @@ import {
 import {
   BarChart3, MessageSquare, Newspaper, Settings, Landmark,
   ArrowLeft, Cpu, ShoppingBag, Banknote, HeartPulse, CircuitBoard, Flame,
-  TrendingUp, TrendingDown
+  TrendingUp, TrendingDown, ExternalLink, Clock
 } from 'lucide-react'
 import { StockQuote } from '@/lib/yfinance'
 
@@ -130,6 +130,116 @@ const SECTORS: Sector[] = [
   },
 ]
 
+// Search query map for better sector-specific news results
+const SECTOR_NEWS_QUERIES: Record<string, string> = {
+  'Technology': 'technology stocks AAPL MSFT GOOGL',
+  'Consumer Goods': 'consumer stocks Amazon Tesla retail',
+  'Finance': 'financial stocks banks JPMorgan Goldman Sachs',
+  'Healthcare': 'healthcare stocks pharmaceutical biotech',
+  'Semiconductors': 'semiconductor stocks NVDA AMD chip AI',
+  'Energy': 'energy stocks oil gas Exxon Chevron',
+}
+
+interface NewsArticle {
+  title: string
+  description: string
+  url: string
+  source: { name: string }
+  publishedAt: string
+  urlToImage: string | null
+}
+
+function SectorNews({ sectorName, sectorColor }: { sectorName: string; sectorColor: string }) {
+  const [articles, setArticles] = useState<NewsArticle[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchNews = async () => {
+      setLoading(true)
+      try {
+        const query = SECTOR_NEWS_QUERIES[sectorName] || `${sectorName} stocks`
+        const res = await fetch(`/api/news?ticker=${encodeURIComponent(query)}`)
+        const result = await res.json()
+        setArticles((result.articles || []).slice(0, 6))
+      } catch (err) {
+        console.error('Failed to fetch sector news:', err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchNews()
+  }, [sectorName])
+
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    const days = Math.floor(hrs / 24)
+    return `${days}d ago`
+  }
+
+  return (
+    <div className="sector-news-section">
+      <div className="sector-news-header">
+        <h3 className="sector-news-title">
+          <Newspaper size={18} />
+          {sectorName} News
+        </h3>
+        <span className="sector-news-subtitle">Latest headlines affecting this sector</span>
+      </div>
+
+      {loading ? (
+        <div className="sector-news-loading">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="sector-news-skeleton">
+              <div className="skel-line skel-title" />
+              <div className="skel-line skel-desc" />
+              <div className="skel-line skel-meta" />
+            </div>
+          ))}
+        </div>
+      ) : articles.length === 0 ? (
+        <div className="sector-news-empty">
+          <Newspaper size={24} strokeWidth={1} />
+          <p>No recent news found for {sectorName}</p>
+        </div>
+      ) : (
+        <div className="sector-news-grid">
+          {articles.map((article, i) => (
+            <a
+              key={i}
+              href={article.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="sector-news-card"
+              style={{ '--sector-accent': sectorColor } as React.CSSProperties}
+            >
+              {article.urlToImage && (
+                <div className="sector-news-img">
+                  <img src={article.urlToImage} alt="" />
+                </div>
+              )}
+              <div className="sector-news-content">
+                <h4 className="sector-news-article-title">{article.title}</h4>
+                {article.description && (
+                  <p className="sector-news-desc">{article.description}</p>
+                )}
+                <div className="sector-news-meta">
+                  <span className="sector-news-source">{article.source.name}</span>
+                  <span className="sector-news-time"><Clock size={11} /> {timeAgo(article.publishedAt)}</span>
+                  <ExternalLink size={12} className="sector-news-link-icon" />
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function GraphsPage() {
   const [activeSector, setActiveSector] = useState<Sector | null>(null)
   const [activeTicker, setActiveTicker] = useState('')
@@ -203,9 +313,9 @@ export default function GraphsPage() {
           </Link>
         </div>
         <div className="sidebar-bottom">
-          <button className="icon-btn">
+          <Link href="/settings" className="icon-btn" title="Settings">
             <Settings size={22} strokeWidth={1.5} />
-          </button>
+          </Link>
           <button className="avatar-btn">
             <div className="avatar">
               <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
@@ -293,20 +403,25 @@ export default function GraphsPage() {
 
           {/* ======================== STOCK LIST FOR SECTOR ======================== */}
           {activeSector && !data && !loading && (
-            <div className="sector-stocks-grid">
-              {activeSector.stocks.map(stock => (
-                <button
-                  key={stock.symbol}
-                  className="sector-stock-card"
-                  style={{ '--sector-color': activeSector.color } as React.CSSProperties}
-                  onClick={() => { setTicker(stock.symbol); fetchStock(stock.symbol, stock.name); }}
-                >
-                  <div className="sector-stock-symbol">{stock.symbol}</div>
-                  <div className="sector-stock-name">{stock.name}</div>
-                  <div className="sector-stock-action">View Chart →</div>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="sector-stocks-grid">
+                {activeSector.stocks.map(stock => (
+                  <button
+                    key={stock.symbol}
+                    className="sector-stock-card"
+                    style={{ '--sector-color': activeSector.color } as React.CSSProperties}
+                    onClick={() => { setTicker(stock.symbol); fetchStock(stock.symbol, stock.name); }}
+                  >
+                    <div className="sector-stock-symbol">{stock.symbol}</div>
+                    <div className="sector-stock-name">{stock.name}</div>
+                    <div className="sector-stock-action">View Chart →</div>
+                  </button>
+                ))}
+              </div>
+
+              {/* Sector News */}
+              <SectorNews sectorName={activeSector.name} sectorColor={activeSector.color} />
+            </>
           )}
 
           {/* ======================== LOADING ======================== */}

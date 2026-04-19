@@ -4,8 +4,16 @@ const NEWS_API_KEY = process.env.NEWS_API_KEY || ''
 const NEWS_API_URL = 'https://newsapi.org/v2/everything'
 
 export async function getStockNews(ticker: string): Promise<NewsArticle[]> {
-  const query = encodeURIComponent(`${ticker} stock OR shares OR market`)
-  const url = `${NEWS_API_URL}?q=${query}&sortBy=publishedAt&pageSize=10&language=en&apiKey=${NEWS_API_KEY}`
+  const query = encodeURIComponent(`${ticker}`)
+  
+  // Trusted US financial/news sources
+  const trustedDomains = [
+    'cnbc.com', 'finance.yahoo.com', 'bloomberg.com', 'wsj.com', 'reuters.com', 
+    'barrons.com', 'marketwatch.com', 'forbes.com', 'nytimes.com', 'washingtonpost.com', 
+    'abcnews.go.com', 'cbsnews.com', 'nbcnews.com', 'usnews.com'
+  ].join(',')
+
+  const url = `${NEWS_API_URL}?q=${query}&domains=${trustedDomains}&sortBy=publishedAt&pageSize=20&language=en&apiKey=${NEWS_API_KEY}`
 
   try {
     const response = await fetch(url, { next: { revalidate: 300 } })

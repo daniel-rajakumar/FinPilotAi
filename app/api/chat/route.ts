@@ -78,6 +78,11 @@ export async function POST(request: NextRequest) {
 
     const responseMessage = await chatWithAI(messages, ticker, stockContext)
 
+    // Attach detected tickers so frontend can render inline charts
+    if (detectedTickers.length > 0) {
+      responseMessage.tickers = detectedTickers
+    }
+
     return NextResponse.json({ message: responseMessage })
   } catch (error) {
     console.error('Chat API error:', error)

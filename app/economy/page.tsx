@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -8,8 +8,11 @@ import {
 } from 'recharts'
 import {
   BarChart3, MessageSquare, Newspaper, Settings,
-  Landmark, TrendingUp, TrendingDown, RefreshCw, ChevronDown
+  Landmark, TrendingUp, TrendingDown, RefreshCw, ChevronDown,
+  Info, CalendarDays, AlertTriangle, Lightbulb, ChevronRight,
+  Calendar, Clock, Zap
 } from 'lucide-react'
+import { getEventsForWeek, getWeekRangeForOffset, type EconEvent } from '@/lib/econ-calendar'
 
 interface Observation {
   date: string
@@ -32,6 +35,100 @@ interface IndicatorMeta {
   color: string
 }
 
+interface IndicatorInsight {
+  id: string
+  name: string
+  what: string
+  whyImportant: string
+  marketImpact: string
+  nextRelease: string
+  frequency: string
+  icon: string
+}
+
+const INDICATOR_INSIGHTS: IndicatorInsight[] = [
+  {
+    id: 'FEDFUNDS',
+    name: 'Federal Funds Rate',
+    what: 'The interest rate at which banks lend money to each other overnight. Set by the Federal Reserve\'s FOMC (Federal Open Market Committee), it\'s the most powerful tool the Fed has to influence the economy.',
+    whyImportant: 'It directly affects borrowing costs for mortgages, car loans, credit cards, and business loans. When rates rise, borrowing becomes expensive and spending slows. When rates fall, money is cheaper and the economy heats up.',
+    marketImpact: 'Rate hikes tend to be bearish for stocks (higher costs, lower valuations) and bullish for the dollar. Rate cuts are generally bullish for stocks and bearish for the dollar. Bond prices move inversely to rates.',
+    nextRelease: 'FOMC meets 8 times per year. Next meeting decisions are announced at 2:00 PM ET.',
+    frequency: 'Updated after each FOMC meeting (~every 6 weeks)',
+    icon: '🏦',
+  },
+  {
+    id: 'CPIAUCSL',
+    name: 'Consumer Price Index (CPI)',
+    what: 'Measures the average change in prices paid by consumers for a basket of goods and services including food, housing, transportation, and healthcare. It\'s the primary gauge of inflation.',
+    whyImportant: 'High inflation erodes purchasing power — your dollar buys less. The Fed targets 2% inflation. When CPI runs hot, the Fed may raise rates to cool the economy. When it\'s too low, it signals weak demand.',
+    marketImpact: 'Higher-than-expected CPI is bearish for stocks (fear of rate hikes) and bearish for bonds. Lower-than-expected CPI is bullish, as it may signal rate cuts ahead. Tech and growth stocks are especially sensitive.',
+    nextRelease: 'Released monthly by the Bureau of Labor Statistics, usually around the 10th-13th of each month at 8:30 AM ET.',
+    frequency: 'Monthly',
+    icon: '📊',
+  },
+  {
+    id: 'UNRATE',
+    name: 'Unemployment Rate',
+    what: 'The percentage of the labor force that is actively looking for work but cannot find a job. It\'s derived from the monthly "Non-Farm Payrolls" report (often called the Jobs Report).',
+    whyImportant: 'A key indicator of economic health. Low unemployment means a strong economy with consumer spending power. Rising unemployment signals a weakening economy and potential recession.',
+    marketImpact: 'A surprisingly strong jobs report (low unemployment) can be bearish if it signals the Fed will keep rates high. A weak report can be bullish if it means rate cuts are coming. Context matters more than the raw number.',
+    nextRelease: 'Released on the first Friday of every month at 8:30 AM ET by the Bureau of Labor Statistics.',
+    frequency: 'Monthly (first Friday)',
+    icon: '👷',
+  },
+  {
+    id: 'DGS10',
+    name: '10-Year Treasury Yield',
+    what: 'The yield (interest rate) on U.S. government bonds that mature in 10 years. It\'s considered the benchmark "risk-free" rate and influences all other interest rates in the economy.',
+    whyImportant: 'It sets the floor for mortgage rates, corporate bond rates, and loan pricing. When the 10Y yield rises, borrowing costs increase across the entire economy. It also reflects market expectations about growth and inflation.',
+    marketImpact: 'Rising yields compete with stocks for investor dollars (why buy risky stocks when bonds pay well?). A yield above 4.5-5% has historically pressured stock valuations. An inverted yield curve (2Y > 10Y) signals recession risk.',
+    nextRelease: 'Updates continuously during market hours. Key moves happen around Fed speeches, CPI/jobs data, and Treasury auctions.',
+    frequency: 'Daily (market hours)',
+    icon: '📈',
+  },
+  {
+    id: 'PAYEMS',
+    name: 'Non-Farm Payrolls (NFP)',
+    what: 'The total number of paid workers in the U.S. economy, excluding farm workers, government employees, private household employees, and nonprofit workers. It measures how many jobs the economy added or lost.',
+    whyImportant: 'The single most market-moving economic report. It shows whether the economy is creating enough jobs to sustain growth. Economists typically expect 150K-250K new jobs per month in a healthy economy.',
+    marketImpact: 'A big beat (more jobs than expected) can be bearish if markets fear the Fed will stay hawkish. A big miss can be bullish on rate-cut hopes. The report often causes massive intraday volatility in stocks, bonds, and forex.',
+    nextRelease: 'Released on the first Friday of every month at 8:30 AM ET, alongside the unemployment rate.',
+    frequency: 'Monthly (first Friday)',
+    icon: '💼',
+  },
+  {
+    id: 'NAPM',
+    name: 'ISM Manufacturing PMI',
+    what: 'The Purchasing Managers\' Index measures manufacturing sector activity. A reading above 50 indicates expansion; below 50 indicates contraction. It surveys purchasing managers on new orders, production, employment, and inventories.',
+    whyImportant: 'It\'s a leading indicator — it shows where the economy is heading before GDP data confirms it. Manufacturing weakness often precedes broader economic slowdowns.',
+    marketImpact: 'PMI above 50 is bullish for stocks, especially industrials and materials. PMI below 50 signals caution. The "prices paid" sub-index is closely watched as an inflation signal that can move Fed policy expectations.',
+    nextRelease: 'Released on the first business day of every month at 10:00 AM ET by the Institute for Supply Management.',
+    frequency: 'Monthly (1st business day)',
+    icon: '🏭',
+  },
+  {
+    id: 'GDP',
+    name: 'Gross Domestic Product (GDP)',
+    what: 'The total value of all goods and services produced in the U.S. economy. It\'s the broadest measure of economic activity. Reported as an annualized quarter-over-quarter growth rate.',
+    whyImportant: 'Two consecutive quarters of negative GDP growth is the informal definition of a recession. Healthy GDP growth (2-3% annually) supports corporate earnings and stock prices.',
+    marketImpact: 'Strong GDP = bullish for stocks but potentially hawkish for Fed policy. Weak GDP = bearish initially but may bring rate cuts. The market often reacts more to the "surprise" factor than the absolute number.',
+    nextRelease: 'Released quarterly (advance estimate ~30 days after quarter ends, then two revisions). Released at 8:30 AM ET by the BEA.',
+    frequency: 'Quarterly (3 estimates per quarter)',
+    icon: '🌎',
+  },
+  {
+    id: 'DEXUSEU',
+    name: 'USD/EUR Exchange Rate',
+    what: 'The price of one Euro in U.S. dollars. It reflects the relative strength of the U.S. and European economies, interest rate differentials, and global risk sentiment.',
+    whyImportant: 'A strong dollar makes U.S. exports more expensive abroad (hurting multinationals) but makes imports cheaper. It affects the earnings of companies with significant international revenue (about 40% of S&P 500 revenue comes from overseas).',
+    marketImpact: 'A strengthening dollar is headwind for large-cap multinationals (AAPL, MSFT) as it reduces the value of overseas revenue. A weakening dollar helps exporters and emerging markets. Currency moves reflect capital flows and risk appetite.',
+    nextRelease: 'Updates continuously during forex trading hours (24/5). Major moves around central bank decisions, economic data releases.',
+    frequency: 'Daily (continuous)',
+    icon: '💱',
+  },
+]
+
 export default function EconomyPage() {
   const [indicators, setIndicators] = useState<Record<string, IndicatorMeta>>({})
   const [data, setData] = useState<Record<string, SeriesData>>({})
@@ -39,6 +136,8 @@ export default function EconomyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [viewAll, setViewAll] = useState(false)
+  const [expandedInsight, setExpandedInsight] = useState<string | null>(null)
+  const [weekOffset, setWeekOffset] = useState(0)
 
   useEffect(() => {
     fetchData(false)
@@ -99,8 +198,17 @@ export default function EconomyPage() {
     return ((latest - prev) / Math.abs(prev)) * 100
   }
 
+  const toggleInsight = (id: string) => {
+    setExpandedInsight(prev => prev === id ? null : id)
+  }
+
   const selectedData = data[selectedSeries]
   const selectedMeta = indicators[selectedSeries]
+
+  // Filter insights to show only ones that match loaded indicators
+  const activeInsights = INDICATOR_INSIGHTS.filter(
+    insight => indicators[insight.id] || Object.keys(indicators).length === 0
+  )
 
   return (
     <div className="app-container">
@@ -123,9 +231,9 @@ export default function EconomyPage() {
           </Link>
         </div>
         <div className="sidebar-bottom">
-          <button className="icon-btn">
+          <Link href="/settings" className="icon-btn" title="Settings">
             <Settings size={22} strokeWidth={1.5} />
-          </button>
+          </Link>
           <button className="avatar-btn">
             <div className="avatar">
               <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
@@ -166,6 +274,121 @@ export default function EconomyPage() {
               <p className="econ-error-hint">Make sure FRED_API_KEY is set in .env.local. Get a free key at <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank">fred.stlouisfed.org</a></p>
             </div>
           )}
+
+          {/* ==================== WEEKLY CALENDAR ==================== */}
+          {(() => {
+            const events = getEventsForWeek(weekOffset)
+            const weekRange = getWeekRangeForOffset(weekOffset)
+            const today = new Date()
+            today.setHours(0, 0, 0, 0)
+
+            return (
+              <div className="econ-calendar-section">
+                <div className="econ-calendar-header">
+                  <div className="econ-calendar-title-row">
+                    <h2 className="econ-calendar-title">
+                      <Calendar size={20} />
+                      Economic Calendar
+                    </h2>
+                    <div className="econ-calendar-nav">
+                      <button className="econ-cal-nav-btn" onClick={() => setWeekOffset(w => w - 1)} disabled={weekOffset <= -4}>
+                        ‹
+                      </button>
+                      <button className="econ-cal-nav-label" onClick={() => setWeekOffset(0)}>
+                        {weekRange.label}
+                      </button>
+                      <button className="econ-cal-nav-btn" onClick={() => setWeekOffset(w => w + 1)} disabled={weekOffset >= 4}>
+                        ›
+                      </button>
+                    </div>
+                    <span className="econ-calendar-range">{weekRange.start} – {weekRange.end}</span>
+                  </div>
+
+                  {/* Column headers */}
+                  <div className="econ-cal-col-headers">
+                    <span className="econ-cal-col-h date-col">Date</span>
+                    <span className="econ-cal-col-h name-col">Event</span>
+                    <span className="econ-cal-col-h data-col">Forecast</span>
+                    <span className="econ-cal-col-h data-col">Previous</span>
+                    <span className="econ-cal-col-h data-col">Actual</span>
+                  </div>
+                </div>
+
+                {events.length === 0 ? (
+                  <div className="econ-calendar-empty">
+                    <Calendar size={32} strokeWidth={1} />
+                    <p>No major economic releases this week</p>
+                    <span>Markets should be driven primarily by earnings and geopolitics</span>
+                  </div>
+                ) : (
+                  <div className="econ-calendar-list">
+                    {events.map((event, i) => {
+                      const eventDate = new Date(event.date)
+                      eventDate.setHours(0, 0, 0, 0)
+                      const isToday = eventDate.getTime() === today.getTime()
+                      const isPast = eventDate < today
+
+                      return (
+                        <div key={`${event.name}-${i}`}>
+                          <div
+                            className={`econ-calendar-item ${isToday ? 'today' : ''} ${isPast && !event.actual ? 'past' : ''}`}
+                          >
+                            <div className="econ-cal-date date-col">
+                              <span className="econ-cal-day">{event.dayLabel.slice(0, 3)}</span>
+                              <span className="econ-cal-datenum">{event.dateLabel}</span>
+                            </div>
+                            <div className="econ-cal-info name-col">
+                              <div className="econ-cal-name-row">
+                                <span className="econ-cal-icon-inline">{event.icon}</span>
+                                <span className="econ-cal-name">{event.name}</span>
+                                <span className={`econ-cal-impact ${event.impact}`}>
+                                  {event.impact === 'high' ? <Zap size={10} /> : null}
+                                  {event.impact === 'high' ? 'High' : 'Med'}
+                                </span>
+                              </div>
+                              <div className="econ-cal-meta">
+                                <span className="econ-cal-time"><Clock size={11} /> {event.time}</span>
+                                <span className="econ-cal-category">{event.category}</span>
+                              </div>
+                            </div>
+                            <div className="econ-cal-data data-col">
+                              <span className="econ-cal-data-label">Forecast</span>
+                              <span className="econ-cal-data-value">{event.forecast ?? '—'}</span>
+                            </div>
+                            <div className="econ-cal-data data-col">
+                              <span className="econ-cal-data-label">Previous</span>
+                              <span className="econ-cal-data-value prev">{event.previous ?? '—'}</span>
+                            </div>
+                            <div className="econ-cal-data data-col">
+                              <span className="econ-cal-data-label">Actual</span>
+                              {event.actual ? (
+                                <span className={`econ-cal-data-value actual ${event.insightType === 'beat' ? 'beat' : event.insightType === 'miss' ? 'miss' : ''}`}>
+                                  {event.actual}
+                                </span>
+                              ) : (
+                                <span className="econ-cal-data-value pending">Pending</span>
+                              )}
+                            </div>
+                            {isToday && <span className="econ-cal-today-badge">TODAY</span>}
+                          </div>
+
+                          {/* Insight bar */}
+                          {event.insight && (
+                            <div className={`econ-cal-insight ${event.insightType}`}>
+                              <span className="econ-cal-insight-badge">
+                                {event.insightType === 'beat' ? '✅ Beat' : event.insightType === 'miss' ? '❌ Miss' : '➖ In Line'}
+                              </span>
+                              <span className="econ-cal-insight-text">{event.insight}</span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Indicator Cards */}
           {!loading && !error && (
@@ -264,6 +487,74 @@ export default function EconomyPage() {
                   </div>
                 </div>
               )}
+
+              {/* ==================== INDICATOR INSIGHTS ==================== */}
+              {(() => {
+                const insight = INDICATOR_INSIGHTS.find(i => i.id === selectedSeries)
+                if (!insight) return null
+                const latestVal = getLatestValue(insight.id)
+                const meta = indicators[insight.id]
+
+                return (
+                  <div className="econ-insights-section">
+                    <div className="econ-insights-header">
+                      <h2 className="econ-insights-title">
+                        <Lightbulb size={20} />
+                        About This Indicator
+                      </h2>
+                    </div>
+
+                    <div className="econ-insight-card expanded">
+                      <div className="econ-insight-trigger-static">
+                        <span className="econ-insight-icon">{insight.icon}</span>
+                        <div className="econ-insight-trigger-info">
+                          <span className="econ-insight-name">{insight.name}</span>
+                          {latestVal !== null && meta && (
+                            <span className="econ-insight-current">
+                              Current: {formatValue(latestVal, meta.units)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="econ-insight-body">
+                        <div className="econ-insight-detail">
+                          <div className="econ-insight-detail-header">
+                            <Info size={14} />
+                            <span>What is it?</span>
+                          </div>
+                          <p>{insight.what}</p>
+                        </div>
+
+                        <div className="econ-insight-detail">
+                          <div className="econ-insight-detail-header">
+                            <AlertTriangle size={14} />
+                            <span>Why it&apos;s important</span>
+                          </div>
+                          <p>{insight.whyImportant}</p>
+                        </div>
+
+                        <div className="econ-insight-detail">
+                          <div className="econ-insight-detail-header">
+                            <TrendingUp size={14} />
+                            <span>How it affects the market</span>
+                          </div>
+                          <p>{insight.marketImpact}</p>
+                        </div>
+
+                        <div className="econ-insight-detail schedule">
+                          <div className="econ-insight-detail-header">
+                            <CalendarDays size={14} />
+                            <span>Release schedule</span>
+                          </div>
+                          <p>{insight.nextRelease}</p>
+                          <span className="econ-insight-freq">{insight.frequency}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </>
           )}
 

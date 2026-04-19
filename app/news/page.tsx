@@ -164,9 +164,9 @@ export default function NewsPage() {
           </Link>
         </div>
         <div className="sidebar-bottom">
-          <button className="icon-btn">
+          <Link href="/settings" className="icon-btn" title="Settings">
             <Settings size={22} strokeWidth={1.5} />
-          </button>
+          </Link>
           <button className="avatar-btn">
             <div className="avatar">
               <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />

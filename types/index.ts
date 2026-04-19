@@ -22,6 +22,7 @@ export interface ChatMessage {
   content: string
   id: string
   timestamp: string
+  tickers?: string[]  // detected stock tickers for inline charts
 }
 
 export interface ChatRequest {
