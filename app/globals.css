@@ -584,53 +584,230 @@ body {
   color: #1c1c1e;
 }
 
-/* Watchlist */
-.watchlist-section {
-  margin-top: 24px;
-}
-
-.watchlist-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #1c1c1e;
-  margin-bottom: 16px;
-}
-
-.watchlist-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+/* Back Button */
+.graphs-header-row {
+  display: flex;
+  align-items: center;
   gap: 12px;
 }
 
-.watchlist-card {
+.back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e5e5ea;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: #1c1c1e;
+  flex-shrink: 0;
+}
+
+.back-btn:hover {
+  background: #f5f5f7;
+  border-color: #d1d1d6;
+}
+
+/* ==================== SECTOR GRID ==================== */
+.sectors-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.sector-card {
+  background: var(--sector-gradient);
+  border: 1px solid #e5e5ea;
+  border-radius: 20px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: left;
+  font-family: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.sector-card::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 120px;
+  height: 120px;
+  background: radial-gradient(circle, var(--sector-color) 0%, transparent 70%);
+  opacity: 0.06;
+  border-radius: 50%;
+  transform: translate(30%, -30%);
+  transition: opacity 0.3s;
+}
+
+.sector-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+  border-color: var(--sector-color);
+}
+
+.sector-card:hover::after {
+  opacity: 0.12;
+}
+
+.sector-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sector-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.sector-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sector-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1c1c1e;
+}
+
+.sector-count {
+  font-size: 13px;
+  color: #8e8e93;
+  font-weight: 500;
+}
+
+.sector-tickers {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.sector-ticker-chip {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+  letter-spacing: 0.3px;
+}
+
+.sector-ticker-chip.more {
+  background: rgba(0, 0, 0, 0.04);
+  color: #9ca3af;
+}
+
+/* ==================== SECTOR STOCK LIST ==================== */
+.sector-stocks-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.sector-stock-card {
   background: #fff;
   border: 1px solid #e5e5ea;
   border-radius: 16px;
   padding: 24px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   font-family: inherit;
+  position: relative;
+  overflow: hidden;
 }
 
-.watchlist-card:hover {
-  border-color: #1c1c1e;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+.sector-stock-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--sector-color);
+  opacity: 0;
+  transition: opacity 0.2s;
 }
 
-.watchlist-ticker {
+.sector-stock-card:hover {
+  border-color: var(--sector-color);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.sector-stock-card:hover::before {
+  opacity: 1;
+}
+
+.sector-stock-symbol {
   font-size: 20px;
   font-weight: 700;
   color: #1c1c1e;
 }
 
-.watchlist-action {
+.sector-stock-name {
+  font-size: 14px;
+  color: #6e6e73;
+  font-weight: 500;
+}
+
+.sector-stock-action {
   font-size: 13px;
+  color: var(--sector-color);
+  font-weight: 600;
+  margin-top: 8px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.2s;
+}
+
+.sector-stock-card:hover .sector-stock-action {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Loading state */
+.stock-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 100px 0;
+  gap: 16px;
+}
+
+.stock-loading p {
   color: #8e8e93;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.stock-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e5e5ea;
+  border-top-color: #1c1c1e;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 /* ==================== NEWS PAGE ==================== */
@@ -722,7 +899,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
@@ -752,13 +929,152 @@ body {
   border-color: #1c1c1e;
 }
 
+/* Market Movers Strip */
+.market-movers-strip {
+  margin-bottom: 24px;
+}
+
+.market-movers-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 10px;
+}
+
+.market-movers-cards {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.mover-card {
+  flex: 0 0 auto;
+  min-width: 120px;
+  background: #fff;
+  border: 1px solid #e5e5ea;
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mover-card:hover {
+  border-color: #d1d1d6;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+}
+
+.mover-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mover-symbol {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1c1c1e;
+}
+
+.mover-badge {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.mover-badge.up {
+  color: #16a34a;
+  background: #f0fdf4;
+}
+
+.mover-badge.down {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.mover-price {
+  font-size: 13px;
+  color: #6e6e73;
+  font-weight: 500;
+}
+
+/* Skeleton loading */
+.mover-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skel-line {
+  height: 12px;
+  background: linear-gradient(90deg, #f0f0f5 25%, #e5e5ea 50%, #f0f0f5 75%);
+  background-size: 200% 100%;
+  border-radius: 6px;
+  animation: shimmer 1.5s infinite;
+  width: 80px;
+}
+
+.skel-line.short {
+  width: 50px;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Results Header */
+.news-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
 /* Results Title */
 .news-results-title {
   font-size: 18px;
   font-weight: 600;
   color: #1c1c1e;
-  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
+
+.news-clear-btn {
+  background: none;
+  border: 1px solid #e5e5ea;
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6e6e73;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.news-clear-btn:hover {
+  background: #f5f5f7;
+  color: #1c1c1e;
+}
+
 
 .news-ticker-highlight {
   color: #16a34a;
@@ -940,6 +1256,11 @@ body {
   margin-bottom: 16px;
 }
 
+.econ-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .econ-refresh {
   display: flex;
   align-items: center;
@@ -958,6 +1279,25 @@ body {
 
 .econ-refresh:hover { background: #f5f5f7; }
 .econ-refresh:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.econ-view-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #1c1c1e;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.econ-view-toggle:hover { background: #333; }
+.econ-view-toggle:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .spinning {
   animation: spin 1s linear infinite;

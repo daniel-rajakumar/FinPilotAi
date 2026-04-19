@@ -4,11 +4,11 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, LineChart, Line
+  ResponsiveContainer
 } from 'recharts'
 import {
   BarChart3, MessageSquare, Newspaper, Settings,
-  Landmark, TrendingUp, TrendingDown, RefreshCw
+  Landmark, TrendingUp, TrendingDown, RefreshCw, ChevronDown
 } from 'lucide-react'
 
 interface Observation {
@@ -35,19 +35,21 @@ interface IndicatorMeta {
 export default function EconomyPage() {
   const [indicators, setIndicators] = useState<Record<string, IndicatorMeta>>({})
   const [data, setData] = useState<Record<string, SeriesData>>({})
-  const [selectedSeries, setSelectedSeries] = useState<string>('GDP')
+  const [selectedSeries, setSelectedSeries] = useState<string>('FEDFUNDS')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [viewAll, setViewAll] = useState(false)
 
   useEffect(() => {
-    fetchAllData()
+    fetchData(false)
   }, [])
 
-  const fetchAllData = async () => {
+  const fetchData = async (all: boolean) => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch('/api/fred?all=true')
+      const param = all ? 'viewAll=true' : 'all=true'
+      const res = await fetch(`/api/fred?${param}`)
       const result = await res.json()
       if (result.error) {
         setError(result.error)
@@ -63,18 +65,29 @@ export default function EconomyPage() {
     }
   }
 
+  const handleViewAll = () => {
+    setViewAll(true)
+    fetchData(true)
+  }
+
+  const handleViewDefault = () => {
+    setViewAll(false)
+    fetchData(false)
+  }
+
   const formatValue = (value: number, units: string) => {
     if (units.includes('%')) return `${value.toFixed(2)}%`
     if (units.includes('Billions')) return `$${value.toLocaleString()}B`
+    if (units.includes('Thousands')) return `${value.toLocaleString()}K`
     if (units.includes('Index')) return value.toFixed(1)
+    if (units.includes('USD per')) return value.toFixed(4)
     return value.toLocaleString()
   }
 
   const getLatestValue = (seriesId: string) => {
     const series = data[seriesId]
     if (!series || series.observations.length === 0) return null
-    const latest = series.observations[series.observations.length - 1]
-    return latest.value
+    return series.observations[series.observations.length - 1].value
   }
 
   const getChange = (seriesId: string) => {
@@ -105,7 +118,7 @@ export default function EconomyPage() {
           </Link>
           <Link href="/economy" className="icon-btn active" title="Economy">
             <div className="active-bg">
-              <Settings size={22} strokeWidth={1.5} />
+              <Landmark size={22} strokeWidth={1.5} />
             </div>
           </Link>
         </div>
@@ -131,10 +144,20 @@ export default function EconomyPage() {
               <h1>Economic Dashboard</h1>
             </div>
             <p className="econ-subtitle">Key macroeconomic indicators from the Federal Reserve (FRED)</p>
-            <button onClick={fetchAllData} className="econ-refresh" disabled={loading}>
-              <RefreshCw size={16} className={loading ? 'spinning' : ''} />
-              {loading ? 'Refreshing...' : 'Refresh Data'}
-            </button>
+            <div className="econ-header-actions">
+              <button onClick={() => fetchData(viewAll)} className="econ-refresh" disabled={loading}>
+                <RefreshCw size={16} className={loading ? 'spinning' : ''} />
+                {loading ? 'Refreshing...' : 'Refresh Data'}
+              </button>
+              <button
+                onClick={viewAll ? handleViewDefault : handleViewAll}
+                className="econ-view-toggle"
+                disabled={loading}
+              >
+                <ChevronDown size={16} />
+                {viewAll ? 'Show Default' : 'View All'}
+              </button>
+            </div>
           </div>
 
           {error && (

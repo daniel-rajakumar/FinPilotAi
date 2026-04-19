@@ -78,9 +78,19 @@ export async function chatWithAI(
   ticker?: string,
   stockContext?: string
 ): Promise<ChatMessage> {
+  const now = new Date()
+  const currentDate = now.toLocaleDateString('en-US', { 
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+  })
+  const currentTime = now.toLocaleTimeString('en-US', { 
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short' 
+  })
+
   let systemPrompt = ticker 
     ? `You are FinPilotAI, an expert financial analyst bot. You are currently analyzing the stock ${ticker}. Provide helpful, accurate, and cautious financial insights based on the user's questions. Always remind the user that this is not financial advice.`
     : `You are FinPilotAI, an expert financial analyst bot. Help the user with stock research, market analysis, and general financial questions. Be concise and professional. Always remind the user that this is not financial advice.`;
+
+  systemPrompt += `\n\nToday's date is ${currentDate}. The current time is ${currentTime}.`
 
   // Inject live stock data if available
   if (stockContext) {

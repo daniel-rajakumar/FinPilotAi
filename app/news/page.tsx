@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import {
   BarChart3, MessageSquare, Settings, Landmark,
-  Newspaper, ExternalLink, Clock, Search
+  Newspaper, ExternalLink, Clock, Search,
+  TrendingUp, TrendingDown, Flame, Zap
 } from 'lucide-react'
 
 interface NewsArticle {
@@ -15,14 +16,87 @@ interface NewsArticle {
   publishedAt: string
 }
 
+interface QuickQuote {
+  symbol: string
+  price: number
+  change: number
+  changePercent: number
+  name: string
+  loading: boolean
+}
+
 const TRENDING_TICKERS = ['AAPL', 'TSLA', 'NVDA', 'GOOGL', 'AMZN', 'META', 'MSFT']
-const CATEGORIES = ['All', 'Tech', 'Finance', 'Crypto', 'Energy']
+
+const MARKET_MOVERS = [
+  { symbol: 'AAPL', name: 'Apple' },
+  { symbol: 'TSLA', name: 'Tesla' },
+  { symbol: 'NVDA', name: 'NVIDIA' },
+  { symbol: 'GOOGL', name: 'Alphabet' },
+  { symbol: 'AMZN', name: 'Amazon' },
+  { symbol: 'META', name: 'Meta' },
+]
 
 export default function NewsPage() {
   const [ticker, setTicker] = useState('')
   const [activeTicker, setActiveTicker] = useState('')
   const [articles, setArticles] = useState<NewsArticle[]>([])
+  const [trendingArticles, setTrendingArticles] = useState<NewsArticle[]>([])
   const [loading, setLoading] = useState(false)
+  const [trendingLoading, setTrendingLoading] = useState(true)
+  const [quotes, setQuotes] = useState<QuickQuote[]>([])
+
+  // Auto-load trending news and ticker quotes on mount
+  useEffect(() => {
+    loadTrendingNews()
+    loadQuickQuotes()
+  }, [])
+
+  const loadTrendingNews = async () => {
+    setTrendingLoading(true)
+    try {
+      const res = await fetch('/api/news?ticker=stock market')
+      const data = await res.json()
+      setTrendingArticles(data.articles || [])
+    } catch (err) {
+      console.error('Failed to fetch trending news:', err)
+    } finally {
+      setTrendingLoading(false)
+    }
+  }
+
+  const loadQuickQuotes = async () => {
+    // Initialize with loading state
+    setQuotes(MARKET_MOVERS.map(m => ({
+      ...m,
+      price: 0,
+      change: 0,
+      changePercent: 0,
+      loading: true,
+    })))
+
+    // Fetch each quote
+    const results = await Promise.allSettled(
+      MARKET_MOVERS.map(async (m) => {
+        const res = await fetch(`/api/stock?symbol=${m.symbol}&period=1`)
+        const data = await res.json()
+        return {
+          symbol: m.symbol,
+          name: m.name,
+          price: data.quote?.price ?? 0,
+          change: data.quote?.change ?? 0,
+          changePercent: data.quote?.changePercent ?? 0,
+          loading: false,
+        }
+      })
+    )
+
+    const resolved = results.map((r, i) =>
+      r.status === 'fulfilled'
+        ? r.value
+        : { ...MARKET_MOVERS[i], price: 0, change: 0, changePercent: 0, loading: false }
+    )
+    setQuotes(resolved)
+  }
 
   const fetchNews = async (symbol: string) => {
     if (!symbol.trim()) return
@@ -45,6 +119,12 @@ export default function NewsPage() {
     if (ticker.trim()) fetchNews(ticker)
   }
 
+  const clearSearch = () => {
+    setActiveTicker('')
+    setArticles([])
+    setTicker('')
+  }
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
     const now = new Date()
@@ -57,6 +137,11 @@ export default function NewsPage() {
     if (diffDays < 7) return `${diffDays}d ago`
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
+
+  // Determine which articles to show
+  const displayArticles = activeTicker ? articles : trendingArticles
+  const isShowingTrending = !activeTicker
+  const isArticlesLoading = activeTicker ? loading : trendingLoading
 
   return (
     <div className="app-container">
@@ -133,59 +218,103 @@ export default function NewsPage() {
             ))}
           </div>
 
-          {/* News Content */}
-          {loading && (
-            <div className="news-loading">
-              <div className="news-loading-spinner" />
-              <p>Fetching latest news for {activeTicker}...</p>
+          {/* ==================== MARKET MOVERS TICKER STRIP ==================== */}
+          <div className="market-movers-strip">
+            <div className="market-movers-label">
+              <Zap size={14} />
+              <span>Market Movers</span>
             </div>
-          )}
+            <div className="market-movers-cards">
+              {quotes.map(q => (
+                <button
+                  key={q.symbol}
+                  className="mover-card"
+                  onClick={() => { setTicker(q.symbol); fetchNews(q.symbol); }}
+                >
+                  {q.loading ? (
+                    <div className="mover-skeleton">
+                      <div className="skel-line short" />
+                      <div className="skel-line" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mover-top">
+                        <span className="mover-symbol">{q.symbol}</span>
+                        <span className={`mover-badge ${q.change >= 0 ? 'up' : 'down'}`}>
+                          {q.change >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                          {q.change >= 0 ? '+' : ''}{q.changePercent.toFixed(1)}%
+                        </span>
+                      </div>
+                      <span className="mover-price">${q.price.toFixed(2)}</span>
+                    </>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
 
-          {!loading && articles.length > 0 && (
-            <>
+          {/* ==================== NEWS CONTENT ==================== */}
+          {/* Results Label */}
+          {activeTicker && !loading && (
+            <div className="news-results-header">
               <h2 className="news-results-title">
                 Latest News for <span className="news-ticker-highlight">{activeTicker}</span>
               </h2>
-              <div className="news-grid">
-                {articles.map((article, i) => (
-                  <a
-                    key={i}
-                    href={article.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`news-card ${i === 0 ? 'featured' : ''}`}
-                  >
-                    <div className="news-card-content">
-                      <div className="news-card-source">
-                        <span className="news-source-name">{article.source}</span>
-                        <span className="news-card-time">
-                          <Clock size={12} />
-                          {formatDate(article.publishedAt)}
-                        </span>
-                      </div>
-                      <h3 className="news-card-title">{article.title}</h3>
-                      {article.description && (
-                        <p className="news-card-desc">{article.description}</p>
-                      )}
-                      <div className="news-card-link">
-                        Read full article <ExternalLink size={14} />
-                      </div>
-                    </div>
-                  </a>
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Empty State */}
-          {!loading && articles.length === 0 && !activeTicker && (
-            <div className="news-empty">
-              <Newspaper size={48} strokeWidth={1} className="news-empty-icon" />
-              <h3>Search for Stock News</h3>
-              <p>Enter a ticker above or click a trending stock to see the latest headlines.</p>
+              <button className="news-clear-btn" onClick={clearSearch}>
+                ← Back to trending
+              </button>
             </div>
           )}
 
+          {isShowingTrending && !trendingLoading && trendingArticles.length > 0 && (
+            <div className="news-results-header">
+              <h2 className="news-results-title">
+                <Flame size={18} /> Trending Headlines
+              </h2>
+            </div>
+          )}
+
+          {/* Loading */}
+          {isArticlesLoading && (
+            <div className="news-loading">
+              <div className="news-loading-spinner" />
+              <p>{activeTicker ? `Fetching latest news for ${activeTicker}...` : 'Loading trending news...'}</p>
+            </div>
+          )}
+
+          {/* Articles Grid */}
+          {!isArticlesLoading && displayArticles.length > 0 && (
+            <div className="news-grid">
+              {displayArticles.map((article, i) => (
+                <a
+                  key={i}
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`news-card ${i === 0 ? 'featured' : ''}`}
+                >
+                  <div className="news-card-content">
+                    <div className="news-card-source">
+                      <span className="news-source-name">{article.source}</span>
+                      <span className="news-card-time">
+                        <Clock size={12} />
+                        {formatDate(article.publishedAt)}
+                      </span>
+                    </div>
+                    <h3 className="news-card-title">{article.title}</h3>
+                    {article.description && (
+                      <p className="news-card-desc">{article.description}</p>
+                    )}
+                    <div className="news-card-link">
+                      Read full article <ExternalLink size={14} />
+                    </div>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* Empty State - only when search returns nothing */}
           {!loading && articles.length === 0 && activeTicker && (
             <div className="news-empty">
               <Newspaper size={48} strokeWidth={1} className="news-empty-icon" />

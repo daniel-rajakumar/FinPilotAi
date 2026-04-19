@@ -17,21 +17,37 @@ export interface FredSeries {
   observations: FredObservation[]
 }
 
-// Key economic indicators with their FRED series IDs
-export const ECONOMIC_INDICATORS: Record<string, { id: string; title: string; units: string; description: string; color: string }> = {
-  GDP: {
-    id: 'GDP',
-    title: 'Gross Domestic Product',
-    units: 'Billions $',
-    description: 'Total value of goods & services produced in the US',
-    color: '#16a34a',
+// Indicator metadata type
+export interface IndicatorMeta {
+  id: string
+  title: string
+  units: string
+  description: string
+  color: string
+}
+
+// Default indicators shown on the dashboard
+export const DEFAULT_INDICATORS: Record<string, IndicatorMeta> = {
+  FEDFUNDS: {
+    id: 'FEDFUNDS',
+    title: 'Interest Rate',
+    units: '%',
+    description: 'Federal Funds Rate — the rate at which banks lend reserves overnight',
+    color: '#9333ea',
   },
   CPIAUCSL: {
     id: 'CPIAUCSL',
-    title: 'Consumer Price Index (CPI)',
+    title: 'Inflation (CPI)',
     units: 'Index (1982-84=100)',
-    description: 'Measures inflation by tracking consumer prices',
+    description: 'Consumer Price Index — measures price changes in a basket of goods',
     color: '#dc2626',
+  },
+  DGS10: {
+    id: 'DGS10',
+    title: '10-Year Bonds',
+    units: '%',
+    description: 'Yield on 10-year US government Treasury bonds',
+    color: '#ea580c',
   },
   UNRATE: {
     id: 'UNRATE',
@@ -40,26 +56,94 @@ export const ECONOMIC_INDICATORS: Record<string, { id: string; title: string; un
     description: 'Percentage of the labor force that is unemployed',
     color: '#2563eb',
   },
-  FEDFUNDS: {
-    id: 'FEDFUNDS',
-    title: 'Federal Funds Rate',
-    units: '%',
-    description: 'Interest rate at which banks lend reserves overnight',
-    color: '#9333ea',
+  IPMAN: {
+    id: 'IPMAN',
+    title: 'PMI (Manufacturing)',
+    units: 'Index (2017=100)',
+    description: 'Industrial Production: Manufacturing Index — tracks factory output',
+    color: '#0891b2',
   },
-  DGS10: {
-    id: 'DGS10',
-    title: '10-Year Treasury Yield',
-    units: '%',
-    description: 'Yield on 10-year US government bonds',
-    color: '#ea580c',
+  PAYEMS: {
+    id: 'PAYEMS',
+    title: 'Non-Farm Payrolls',
+    units: 'Thousands',
+    description: 'Total non-farm employees — key measure of job growth',
+    color: '#16a34a',
+  },
+}
+
+// Extended indicators for "View All"
+export const ALL_INDICATORS: Record<string, IndicatorMeta> = {
+  ...DEFAULT_INDICATORS,
+  GDP: {
+    id: 'GDP',
+    title: 'Gross Domestic Product',
+    units: 'Billions $',
+    description: 'Total value of goods & services produced in the US',
+    color: '#16a34a',
   },
   M2SL: {
     id: 'M2SL',
     title: 'M2 Money Supply',
     units: 'Billions $',
     description: 'Total money supply including cash, deposits, and near-money',
-    color: '#0891b2',
+    color: '#6366f1',
+  },
+  PPIACO: {
+    id: 'PPIACO',
+    title: 'Producer Price Index',
+    units: 'Index',
+    description: 'Measures average changes in selling prices received by producers',
+    color: '#f59e0b',
+  },
+  DGS2: {
+    id: 'DGS2',
+    title: '2-Year Treasury Yield',
+    units: '%',
+    description: 'Yield on 2-year US government bonds — sensitive to Fed policy',
+    color: '#14b8a6',
+  },
+  T10Y2Y: {
+    id: 'T10Y2Y',
+    title: 'Yield Curve (10Y-2Y)',
+    units: '%',
+    description: 'Spread between 10Y and 2Y yields — negative = inversion signal',
+    color: '#e11d48',
+  },
+  DEXUSEU: {
+    id: 'DEXUSEU',
+    title: 'USD/EUR Exchange Rate',
+    units: 'USD per EUR',
+    description: 'US Dollar to Euro exchange rate',
+    color: '#7c3aed',
+  },
+  CSUSHPISA: {
+    id: 'CSUSHPISA',
+    title: 'Home Price Index',
+    units: 'Index (Jan 2000=100)',
+    description: 'S&P/Case-Shiller U.S. National Home Price Index',
+    color: '#059669',
+  },
+  UMCSENT: {
+    id: 'UMCSENT',
+    title: 'Consumer Sentiment',
+    units: 'Index (1966:Q1=100)',
+    description: 'University of Michigan Consumer Sentiment Index',
+    color: '#d97706',
+  },
+  JTSJOL: {
+    id: 'JTSJOL',
+    title: 'Job Openings (JOLTS)',
+    units: 'Thousands',
+    description: 'Total nonfarm job openings from JOLTS survey',
+    color: '#0284c7',
+  },
+  VIXCLS: {
+    id: 'VIXCLS',
+    title: 'VIX (Volatility Index)',
+    units: 'Index',
+    description: 'CBOE Volatility Index — measures market fear/uncertainty',
+    color: '#be123c',
   },
 }
 
