@@ -260,6 +260,7 @@ export default function ChatDashboard() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isChatHydrated, setIsChatHydrated] = useState(false)
   
   // Voice states
   const [isRecording, setIsRecording] = useState(false)
@@ -568,14 +569,43 @@ export default function ChatDashboard() {
 
   // Auto-save history whenever messages change
   useEffect(() => {
-    if (messages.length > 0) {
-      fetch('/api/data/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(messages)
-      }).catch(err => console.error('Failed to auto-save:', err))
+    if (!isChatHydrated) return
+
+    fetch('/api/data/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(messages)
+    }).catch(err => console.error('Failed to auto-save:', err))
+  }, [messages, isChatHydrated])
+
+  // Restore saved history when returning to the chat section
+  useEffect(() => {
+    let cancelled = false
+
+    const loadSavedChat = async () => {
+      try {
+        const res = await fetch('/api/data/chat')
+        if (!res.ok) throw new Error('Failed to load saved chat')
+
+        const savedMessages = await res.json()
+        if (!cancelled && Array.isArray(savedMessages)) {
+          setMessages((current) => current.length === 0 ? savedMessages : current)
+        }
+      } catch (err) {
+        console.error('Failed to restore chat history:', err)
+      } finally {
+        if (!cancelled) {
+          setIsChatHydrated(true)
+        }
+      }
     }
-  }, [messages])
+
+    loadSavedChat()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Auto-scroll to bottom of chat
   useEffect(() => {

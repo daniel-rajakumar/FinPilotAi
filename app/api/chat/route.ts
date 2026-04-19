@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { streamChatWithAI } from '@/lib/openai'
 import { ChatRequest, NewsArticle } from '@/types'
-import { getStockQuote, getStockHistory, getStockQuotes, formatStockDataForAI, StockHistory, StockQuote } from '@/lib/yfinance'
+import { getMostActiveStocks, getStockQuote, getStockHistory, getStockHistoryRange, getStockQuotes, getStockVolumeStats, formatStockDataForAI, StockHistory, StockQuote } from '@/lib/yfinance'
 import { getStockNews } from '@/lib/news'
 import { FredSeries, getMultipleSeries, DEFAULT_INDICATORS } from '@/lib/fred'
 import { getOptionFlow, OptionFlowData } from '@/lib/option-flow'
@@ -16,20 +16,117 @@ const KNOWN_TICKERS = [
   'SPY', 'QQQ', 'VOO', 'VTI', 'IWM', 'DIA',
 ]
 
+const COMPANY_ALIASES: Array<{ pattern: RegExp; ticker: string }> = [
+  { pattern: /\bapple\b/i, ticker: 'AAPL' },
+  { pattern: /\bmicrosoft\b/i, ticker: 'MSFT' },
+  { pattern: /\b(alphabet|google)\b/i, ticker: 'GOOGL' },
+  { pattern: /\bamazon\b/i, ticker: 'AMZN' },
+  { pattern: /\b(meta|facebook)\b/i, ticker: 'META' },
+  { pattern: /\btesla\b/i, ticker: 'TSLA' },
+  { pattern: /\bnvidia\b/i, ticker: 'NVDA' },
+  { pattern: /\bamd\b|advanced micro devices/i, ticker: 'AMD' },
+  { pattern: /\bnetflix\b/i, ticker: 'NFLX' },
+  { pattern: /\bberkshire\b/i, ticker: 'BRK-B' },
+]
+
 const MARKET_CAP_CANDIDATES = [
   'NVDA', 'MSFT', 'AAPL', 'AMZN', 'GOOGL', 'META', 'TSLA', 'BRK-B', 'AVGO',
   'TSM', 'WMT', 'JPM', 'LLY', 'V', 'ORCL', 'MA', 'NFLX', 'XOM', 'COST',
   'PG', 'JNJ', 'HD', 'ABBV', 'BAC', 'KO',
 ]
 
+const EARNINGS_CANDIDATES = [...new Set([
+  ...MARKET_CAP_CANDIDATES,
+  ...KNOWN_TICKERS,
+  'BRK-B', 'BAC', 'GS', 'NKE', 'PG', 'MRK', 'QCOM', 'AVGO', 'TSM',
+])]
+
 const MARKET_CAP_QUERY_PATTERN = /\b(top|largest|biggest|highest)\b[\s\S]{0,60}\bmarket\s*cap\b|\bmarket\s*cap\b[\s\S]{0,60}\b(top|largest|biggest|highest)\b|\b(top|largest|biggest|highest)\b[\s\S]{0,30}\bmarketcap\b|\bmarketcap\b[\s\S]{0,30}\b(top|largest|biggest|highest)\b/i
 const ANALYSIS_QUERY_PATTERN = /\b(why|because|analysis|analyze|sentiment|impact|compare|versus|vs\.?|news|explain|macro)\b/i
+const HISTORICAL_YEAR_PATTERN = /\b(19|20)\d{2}\b/
+const HISTORICAL_QUERY_PATTERN = /\b(price|trading|stock data|stock price|share price|history|historical|earliest|oldest|first available|how far back)\b/i
+const MONTHLY_VOLUME_QUERY_PATTERN = /\b(top|highest|most)\b[\s\S]{0,40}\bvolume\b[\s\S]{0,50}\b(last month|past month|over the last month|30 days|past 30 days|last 30 days)\b|\b(last month|past month|over the last month|30 days|past 30 days|last 30 days)\b[\s\S]{0,50}\b(top|highest|most)\b[\s\S]{0,40}\bvolume\b/i
+const EARNINGS_QUERY_PATTERN = /\b(earning|earnings|report|reporting)\b[\s\S]{0,30}\b(next week|this week|tomorrow|today)\b|\b(next week|this week|tomorrow|today)\b[\s\S]{0,30}\b(earning|earnings|report|reporting)\b/i
 
 interface TickerContextResult {
   ticker: string
   quote: StockQuote | null
   history: StockHistory[]
   news: NewsArticle[]
+}
+
+interface SectorStock {
+  symbol: string
+  name: string
+}
+
+const SECTOR_STOCKS: Record<string, { label: string; stocks: SectorStock[] }> = {
+  technology: {
+    label: 'Technology',
+    stocks: [
+      { symbol: 'AAPL', name: 'Apple Inc.' },
+      { symbol: 'MSFT', name: 'Microsoft Corp.' },
+      { symbol: 'GOOGL', name: 'Alphabet Inc.' },
+      { symbol: 'META', name: 'Meta Platforms' },
+      { symbol: 'CRM', name: 'Salesforce Inc.' },
+      { symbol: 'ORCL', name: 'Oracle Corp.' },
+    ],
+  },
+  'consumer goods': {
+    label: 'Consumer Goods',
+    stocks: [
+      { symbol: 'AMZN', name: 'Amazon.com' },
+      { symbol: 'TSLA', name: 'Tesla Inc.' },
+      { symbol: 'NKE', name: 'Nike Inc.' },
+      { symbol: 'PG', name: 'Procter & Gamble' },
+      { symbol: 'KO', name: 'Coca-Cola Co.' },
+      { symbol: 'PEP', name: 'PepsiCo Inc.' },
+    ],
+  },
+  finance: {
+    label: 'Finance',
+    stocks: [
+      { symbol: 'JPM', name: 'JPMorgan Chase' },
+      { symbol: 'BAC', name: 'Bank of America' },
+      { symbol: 'GS', name: 'Goldman Sachs' },
+      { symbol: 'V', name: 'Visa Inc.' },
+      { symbol: 'MA', name: 'Mastercard Inc.' },
+      { symbol: 'BRK-B', name: 'Berkshire Hathaway' },
+    ],
+  },
+  healthcare: {
+    label: 'Healthcare',
+    stocks: [
+      { symbol: 'JNJ', name: 'Johnson & Johnson' },
+      { symbol: 'UNH', name: 'UnitedHealth Group' },
+      { symbol: 'PFE', name: 'Pfizer Inc.' },
+      { symbol: 'ABBV', name: 'AbbVie Inc.' },
+      { symbol: 'MRK', name: 'Merck & Co.' },
+      { symbol: 'LLY', name: 'Eli Lilly & Co.' },
+    ],
+  },
+  semiconductors: {
+    label: 'Semiconductors',
+    stocks: [
+      { symbol: 'NVDA', name: 'NVIDIA Corp.' },
+      { symbol: 'AMD', name: 'Advanced Micro Devices' },
+      { symbol: 'INTC', name: 'Intel Corp.' },
+      { symbol: 'TSM', name: 'Taiwan Semiconductor' },
+      { symbol: 'AVGO', name: 'Broadcom Inc.' },
+      { symbol: 'QCOM', name: 'Qualcomm Inc.' },
+    ],
+  },
+  energy: {
+    label: 'Energy',
+    stocks: [
+      { symbol: 'XOM', name: 'Exxon Mobil' },
+      { symbol: 'CVX', name: 'Chevron Corp.' },
+      { symbol: 'COP', name: 'ConocoPhillips' },
+      { symbol: 'SLB', name: 'Schlumberger' },
+      { symbol: 'EOG', name: 'EOG Resources' },
+      { symbol: 'NEE', name: 'NextEra Energy' },
+    ],
+  },
 }
 
 function isPureMarketCapLeaderboardRequest(message: string): boolean {
@@ -48,6 +145,46 @@ function getRequestedLimit(message: string, fallback: number = 5): number {
   }
 
   return fallback
+}
+
+function isHistoricalStockQuery(message: string): boolean {
+  return HISTORICAL_QUERY_PATTERN.test(message) || HISTORICAL_YEAR_PATTERN.test(message)
+}
+
+function isMonthlyVolumeLeaderboardQuery(message: string): boolean {
+  return MONTHLY_VOLUME_QUERY_PATTERN.test(message)
+}
+
+function isUpcomingEarningsQuery(message: string): boolean {
+  return EARNINGS_QUERY_PATTERN.test(message)
+}
+
+function detectSectorKey(message: string): string | null {
+  const normalized = message.toLowerCase()
+
+  if (/\bsemiconductor(s)?\b|\bchip(s)?\b/.test(normalized)) return 'semiconductors'
+  if (/\btechnology\b|\btech\b/.test(normalized)) return 'technology'
+  if (/\bconsumer goods\b|\bconsumer\b/.test(normalized)) return 'consumer goods'
+  if (/\bfinance\b|\bfinancials?\b|\bbanks?\b/.test(normalized)) return 'finance'
+  if (/\bhealthcare\b|\bhealth care\b|\bpharma\b/.test(normalized)) return 'healthcare'
+  if (/\benergy\b|\boil\b|\bgas\b/.test(normalized)) return 'energy'
+
+  return null
+}
+
+function isSectorSuggestionQuery(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return Boolean(detectSectorKey(message)) && /\b(suggest|good stocks|stock ideas|names|best stocks|stocks in|sector)\b/.test(normalized)
+}
+
+function extractHistoricalYear(message: string): number | null {
+  const match = message.match(HISTORICAL_YEAR_PATTERN)
+  if (!match) return null
+  return Number(match[0])
+}
+
+function isEarliestHistoryQuery(message: string): boolean {
+  return /\b(earliest|oldest|first available|how far back|max history)\b/i.test(message)
 }
 
 function formatMarketCap(value: number | null): string {
@@ -90,6 +227,250 @@ function buildTextStreamResponse(text: string, tickers: string[] = []) {
       'Connection': 'keep-alive'
     }
   })
+}
+
+function formatPrice(value: number): string {
+  return `$${value.toFixed(2)}`
+}
+
+async function buildHistoricalStockResponse(message: string, detectedTickers: string[]) {
+  const primaryTicker = detectedTickers[0]
+  if (!primaryTicker) {
+    return buildTextStreamResponse('Tell me which stock you want, for example AAPL or Apple.')
+  }
+
+  const quote = await getStockQuote(primaryTicker)
+  const displayName = quote?.name || primaryTicker
+
+  if (isEarliestHistoryQuery(message)) {
+    const history = await getStockHistoryRange(primaryTicker, {
+      startDate: new Date('1900-01-01'),
+      endDate: new Date(),
+      interval: '1mo',
+    })
+
+    const firstPoint = history[0]
+    if (!firstPoint) {
+      return buildTextStreamResponse(
+        `I could not find historical price data for ${displayName} (${primaryTicker}).`,
+        [primaryTicker]
+      )
+    }
+
+    return buildTextStreamResponse(
+      `The earliest ${displayName} (${primaryTicker}) price data I can access is ${firstPoint.date}, with a close of ${formatPrice(firstPoint.close)}.`,
+      [primaryTicker]
+    )
+  }
+
+  const year = extractHistoricalYear(message)
+  if (year) {
+    const history = await getStockHistoryRange(primaryTicker, {
+      startDate: new Date(`${year}-01-01T00:00:00Z`),
+      endDate: new Date(`${year}-12-31T23:59:59Z`),
+      interval: '1d',
+    })
+
+    if (history.length === 0) {
+      return buildTextStreamResponse(
+        `I could not find ${displayName} (${primaryTicker}) price data for ${year}.`,
+        [primaryTicker]
+      )
+    }
+
+    const firstPoint = history[0]
+    const lastPoint = history[history.length - 1]
+    const lowPoint = history.reduce((lowest, point) => point.close < lowest.close ? point : lowest, history[0])
+    const highPoint = history.reduce((highest, point) => point.close > highest.close ? point : highest, history[0])
+
+    return buildTextStreamResponse(
+      `${displayName} (${primaryTicker}) in ${year}: first available close was ${formatPrice(firstPoint.close)} on ${firstPoint.date}, last close was ${formatPrice(lastPoint.close)} on ${lastPoint.date}. The ${year} range was ${formatPrice(lowPoint.close)} to ${formatPrice(highPoint.close)}.`,
+      [primaryTicker]
+    )
+  }
+
+  return buildTextStreamResponse('I need a year or a clearer historical time period for that stock question.', [primaryTicker])
+}
+
+function formatLargeVolume(value: number): string {
+  if (value >= 1e9) {
+    return `${(value / 1e9).toFixed(2)}B`
+  }
+
+  if (value >= 1e6) {
+    return `${(value / 1e6).toFixed(2)}M`
+  }
+
+  return value.toLocaleString()
+}
+
+async function buildMonthlyVolumeLeaderboardResponse(message: string) {
+  const limit = getRequestedLimit(message, 25)
+  const candidates = await getMostActiveStocks(100)
+
+  const equities = candidates.filter((candidate) => candidate.quoteType === 'EQUITY')
+  const endDate = new Date()
+  const startDate = new Date()
+  startDate.setDate(startDate.getDate() - 30)
+
+  const volumeStats = (await Promise.all(
+    equities.map(async (candidate) => {
+      const stats = await getStockVolumeStats(candidate.symbol, {
+        startDate,
+        endDate,
+        interval: '1d',
+      })
+
+      if (!stats) return null
+
+      return {
+        ...candidate,
+        ...stats,
+      }
+    })
+  )).filter(Boolean) as Array<{
+    symbol: string
+    name: string
+    quoteType: string | null
+    totalVolume: number
+    averageDailyVolume: number
+    tradingDays: number
+  }>
+
+  if (volumeStats.length === 0) {
+    return buildTextStreamResponse(
+      'I could not compute a monthly volume leaderboard from my active market feed right now.'
+    )
+  }
+
+  const topVolume = volumeStats
+    .sort((a, b) => b.totalVolume - a.totalVolume)
+    .slice(0, limit)
+
+  const rankings = topVolume.map((stock, index) => {
+    const avgDailyVolume = formatLargeVolume(stock.averageDailyVolume)
+    const totalVolume = formatLargeVolume(stock.totalVolume)
+    return `${index + 1}. ${stock.name} (${stock.symbol}) - ${totalVolume} shares over ${stock.tradingDays} trading days (avg ${avgDailyVolume}/day)`
+  }).join('\n')
+
+  return buildTextStreamResponse(
+    `Top ${topVolume.length} highest-volume traded US equities over the last 30 calendar days from the Yahoo most-active equity universe:\n\n${rankings}`,
+    topVolume.map((stock) => stock.symbol)
+  )
+}
+
+async function buildSectorSuggestionResponse(message: string) {
+  const sectorKey = detectSectorKey(message)
+  if (!sectorKey) {
+    return buildTextStreamResponse('Tell me which sector you want, for example semiconductors, technology, healthcare, finance, consumer goods, or energy.')
+  }
+
+  const sector = SECTOR_STOCKS[sectorKey]
+  const limit = Math.min(getRequestedLimit(message, 5), sector.stocks.length)
+
+  const enriched = (await Promise.all(
+    sector.stocks.map(async (stock) => {
+      const [quote, history] = await Promise.all([
+        getStockQuote(stock.symbol),
+        getStockHistory(stock.symbol, 30),
+      ])
+
+      const monthReturn = history.length >= 2
+        ? ((history[history.length - 1].close - history[0].close) / history[0].close) * 100
+        : null
+
+      return {
+        ...stock,
+        quote,
+        monthReturn,
+      }
+    })
+  )).filter((stock) => stock.quote) as Array<{
+    symbol: string
+    name: string
+    quote: StockQuote
+    monthReturn: number | null
+  }>
+
+  if (enriched.length === 0) {
+    return buildTextStreamResponse(`I could not pull live ${sector.label} stock data from my active market feed right now.`)
+  }
+
+  const ranked = enriched
+    .sort((a, b) => {
+      const marketCapDiff = (b.quote.marketCap ?? 0) - (a.quote.marketCap ?? 0)
+      if (marketCapDiff !== 0) return marketCapDiff
+      return (b.monthReturn ?? -Infinity) - (a.monthReturn ?? -Infinity)
+    })
+    .slice(0, limit)
+
+  const lines = ranked.map((stock, index) => {
+    const today = `${stock.quote.changePercent >= 0 ? '+' : ''}${stock.quote.changePercent.toFixed(2)}%`
+    const month = stock.monthReturn == null
+      ? '30d N/A'
+      : `30d ${stock.monthReturn >= 0 ? '+' : ''}${stock.monthReturn.toFixed(2)}%`
+
+    return `${index + 1}. ${stock.name} (${stock.symbol}) - ${formatPrice(stock.quote.price)}, today ${today}, ${month}`
+  }).join('\n')
+
+  return buildTextStreamResponse(
+    `Here are ${ranked.length} tracked ${sector.label.toLowerCase()} stocks from this app's sector universe, ranked by current market cap and annotated with live price action:\n\n${lines}\n\nIf you want, I can also rank the same sector by 30-day performance, market cap, or volume.`,
+    ranked.map((stock) => stock.symbol)
+  )
+}
+
+function getWeekRangeLabel(start: Date, end: Date): string {
+  return `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+}
+
+function getNextWeekRange(fromDate: Date): { start: Date; end: Date } {
+  const start = new Date(fromDate)
+  const day = start.getDay()
+  const daysUntilNextMonday = ((8 - day) % 7) || 7
+  start.setDate(start.getDate() + daysUntilNextMonday)
+  start.setHours(0, 0, 0, 0)
+
+  const end = new Date(start)
+  end.setDate(end.getDate() + 6)
+  end.setHours(23, 59, 59, 999)
+
+  return { start, end }
+}
+
+async function buildUpcomingEarningsResponse(message: string) {
+  const now = new Date()
+  const { start, end } = getNextWeekRange(now)
+  const quotes = await getStockQuotes(EARNINGS_CANDIDATES)
+
+  const matches = quotes
+    .filter((quote) => quote.quoteType === 'EQUITY' && quote.earningsTimestampStart)
+    .map((quote) => ({
+      ...quote,
+      earningsDate: new Date(quote.earningsTimestampStart as string),
+    }))
+    .filter((quote) => !Number.isNaN(quote.earningsDate.getTime()) && quote.earningsDate >= start && quote.earningsDate <= end)
+    .sort((a, b) => a.earningsDate.getTime() - b.earningsDate.getTime() || (b.marketCap ?? 0) - (a.marketCap ?? 0))
+
+  if (matches.length === 0) {
+    return buildTextStreamResponse(
+      `I did not find any tracked earnings reports in my active market feed for next week (${getWeekRangeLabel(start, end)}).`
+    )
+  }
+
+  const lines = matches.map((quote, index) => {
+    const dateLabel = quote.earningsDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
+    return `${index + 1}. ${quote.name} (${quote.symbol}) - ${dateLabel}`
+  }).join('\n')
+
+  return buildTextStreamResponse(
+    `Tracked stocks reporting earnings next week (${getWeekRangeLabel(start, end)}):\n\n${lines}`,
+    matches.map((quote) => quote.symbol)
+  )
 }
 
 async function buildMarketCapLeaderboardResponse(message: string, brainrotMode?: boolean) {
@@ -150,6 +531,12 @@ function detectTickers(message: string): string[] {
     }
   }
 
+  for (const alias of COMPANY_ALIASES) {
+    if (alias.pattern.test(message) && !found.includes(alias.ticker)) {
+      found.push(alias.ticker)
+    }
+  }
+
   return found.slice(0, 3) // Max 3 dedicated ticker API concurrent queries at a time
 }
 
@@ -167,13 +554,29 @@ export async function POST(request: NextRequest) {
 
     // Get the latest user message to detect tickers
     const latestMessage = messages[messages.length - 1]
+    const detectedTickers = ticker 
+      ? [ticker] 
+      : detectTickers(latestMessage.content)
+
     if (isPureMarketCapLeaderboardRequest(latestMessage.content)) {
       return await buildMarketCapLeaderboardResponse(latestMessage.content, brainrotMode)
     }
 
-    const detectedTickers = ticker 
-      ? [ticker] 
-      : detectTickers(latestMessage.content)
+    if (isSectorSuggestionQuery(latestMessage.content)) {
+      return await buildSectorSuggestionResponse(latestMessage.content)
+    }
+
+    if (isUpcomingEarningsQuery(latestMessage.content)) {
+      return await buildUpcomingEarningsResponse(latestMessage.content)
+    }
+
+    if (isMonthlyVolumeLeaderboardQuery(latestMessage.content)) {
+      return await buildMonthlyVolumeLeaderboardResponse(latestMessage.content)
+    }
+
+    if (isHistoricalStockQuery(latestMessage.content)) {
+      return await buildHistoricalStockResponse(latestMessage.content, detectedTickers)
+    }
 
     // Fetch EVERYTHING concurrently to feed the Financial Intelligence Engine
     const contextPromises: Array<
