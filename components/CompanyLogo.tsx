@@ -10,7 +10,7 @@ export default function CompanyLogo({ symbol, size = 24 }: { symbol: string, siz
 
   return (
     <img 
-      src={`https://img.logo.dev/ticker/${cleanSymbol}?token=${LOGO_DEV_TOKEN}`}
+      src={`https://img.logo.dev/ticker/${cleanSymbol}?token=${LOGO_DEV_TOKEN}&format=png&theme=dark`}
       alt={`${symbol} logo`}
       style={{
         width: size,

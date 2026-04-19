@@ -89,8 +89,9 @@ export async function POST(request: NextRequest) {
       let macroDataText = '';
       const uMessage = latestMessage.content.toLowerCase();
 
-      // Ensure we check for macroeconomic concepts first
-      const hasMacroKeywords = uMessage.includes('interest rate') || uMessage.includes('inflation') || uMessage.includes('cpi') || uMessage.includes('unemployment') || uMessage.includes('economy') || uMessage.includes('fed');
+      // Ensure we check for macroeconomic concepts first (using robust Regex to catch common typos like "intrest")
+      const macroPattern = /interest|intrest|yield|inflation|cpi|unemployment|employ|economy|economic|fed|gdp/i;
+      const hasMacroKeywords = macroPattern.test(uMessage);
       
       if (hasMacroKeywords) {
         // Fetch top tier macro indicators
