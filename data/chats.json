@@ -1,29 +1,56 @@
 [
   {
-    "id": "1776581133566",
+    "id": "1776580620961",
     "role": "user",
-    "content": "What's happening with NVDA stock today?",
-    "timestamp": "2026-04-19T06:45:33.566Z"
+    "content": "hello",
+    "timestamp": "2026-04-19T06:37:00.961Z"
   },
   {
-    "id": "1776581136914",
+    "id": "1776580622995",
     "role": "assistant",
-    "content": "NVIDIA Corporation (NVDA) is currently trading at $201.68, reflecting a gain of $3.33 or 1.68% from the previous close of $198.35. The stock opened at $199.88 and has fluctuated between $199.27 and $201.70 during the day.\n\nKey metrics include:\n- **Volume**: 153,662,565 shares, which indicates high trading activity.\n- **Market Cap**: $4.90 trillion, positioning NVDA among the largest companies in the market.\n- **30-Day Trend**: The stock has shown a substantial increase of 16.78% over the past month, rising from $172.70.\n\nRecent news highlights include mixed signals amid market volatility, analysts evaluating NVDA's outlook for the quarter, and notable increases in trading volume following earnings reports.\n\nOverall, NVDA appears to be experiencing positive momentum amidst broader market optimism, particularly with the Nasdaq reaching new heights recently. This could be indicative of strong investor sentiment towards technology stocks in light of the ongoing market rally.",
-    "timestamp": "2026-04-19T06:45:36.914Z",
-    "tickers": [
-      "NVDA"
-    ]
+    "content": "Yo, what’s good? Just vibin’ in the finance world, ready to spill some rizz on the market! What’s poppin’? Need insights or stock analysis? Let’s get it! 💸✨",
+    "timestamp": "2026-04-19T06:37:02.995Z"
   },
   {
-    "id": "1776581223283",
+    "id": "1776580642582",
     "role": "user",
-    "content": "are you sure its up 16.78% MoM",
-    "timestamp": "2026-04-19T06:47:03.283Z"
+    "content": "you good",
+    "timestamp": "2026-04-19T06:37:22.582Z"
   },
   {
-    "id": "1776581225462",
+    "id": "1776580644012",
     "role": "assistant",
-    "content": "Yes, the 30-day trend for NVIDIA Corporation (NVDA) indicates an increase of **16.78%**, moving from a price of **$172.70** to the current price of **$201.68**. This calculation is based on the following formula for percentage change:\n\n\\[\n\\text{Percentage Change} = \\left( \\frac{\\text{Current Price} - \\text{Previous Price}}{\\text{Previous Price}} \\right) \\times 100\n\\]\n\nApplying the numbers:\n\n\\[\n\\text{Percentage Change} = \\left( \\frac{201.68 - 172.70}{172.70} \\right) \\times 100 \\approx 16.78\\%\n\\]\n\nThus, the 16.78% increase is accurate for the month-over-month price change for NVDA.",
-    "timestamp": "2026-04-19T06:47:05.462Z"
+    "content": "Fr fr, I'm vibin' like a stock on a bull run! Just here to drop some knowledge bombs on the market and flex that financial muscle. You got any stocks or market moves you wanna dissect? Let’s go! 📈💥",
+    "timestamp": "2026-04-19T06:37:24.012Z"
+  },
+  {
+    "id": "1776580662864",
+    "role": "assistant",
+    "content": "Aight, check it: Why did the stock market break up with the bond market? \n\nBecause it found someone with more *interest*! 😂💰 \n\nNow that’s some financial humor right there! Got any stocks you wanna chat",
+    "timestamp": "2026-04-19T06:37:42.864Z"
+  },
+  {
+    "id": "1776580663514",
+    "role": "user",
+    "content": "give me a joke",
+    "timestamp": "2026-04-19T06:37:43.514Z"
+  },
+  {
+    "id": "1776580665703",
+    "role": "assistant",
+    "content": "Aight, here’s one for ya: Why don’t stock traders ever get lost?\n\nBecause they always follow the “trend” and know how to “navigate” the market! 😂📊 \n\nLowkey, that one’s a classic! Got any more requests? Let’s keep it bussin’!",
+    "timestamp": "2026-04-19T06:37:45.703Z"
+  },
+  {
+    "id": "1776581352208",
+    "role": "user",
+    "content": "remove the profile picture on the bottom... do not need that ",
+    "timestamp": "2026-04-19T06:49:12.208Z"
+  },
+  {
+    "id": "1776581353806",
+    "role": "assistant",
+    "content": "Ayo, I feel you! But I can’t mess with the layout or visuals, I’m just here to drop that financial knowledge and keep the vibes high. Need help with stocks or market analysis? Let’s get it poppin’! 💸🔥",
+    "timestamp": "2026-04-19T06:49:13.806Z"
   }
 ]

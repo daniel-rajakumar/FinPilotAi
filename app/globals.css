@@ -130,27 +130,6 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-}
-
-.avatar-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  overflow: hidden;
-}
-
-.avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 /* Main Area */

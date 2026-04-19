@@ -62,12 +62,6 @@ export default function AppSidebar({ active }: AppSidebarProps) {
         {bottomItems.map((item) => (
           <SidebarLink key={item.id} item={item} active={item.id === active} />
         ))}
-
-        <button className="avatar-btn">
-          <div className="avatar">
-            <img src="https://i.pravatar.cc/150?img=47" alt="User avatar" />
-          </div>
-        </button>
       </div>
     </aside>
   )
