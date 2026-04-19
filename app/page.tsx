@@ -270,6 +270,10 @@ export default function ChatDashboard() {
   const [ttsLoadingId, setTtsLoadingId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
+  // SSE TTS Queue Engine
+  const audioQueueRef = useRef<string[]>([])
+  const isPlayingAudioRef = useRef(false)
+
   // Full Screen Voice states
   const [isFullScreenVoice, setIsFullScreenVoice] = useState(false)
   const isVoiceActiveRef = useRef(false)
@@ -349,34 +353,57 @@ export default function ChatDashboard() {
     }
   }
 
-  const playTTSVoiceMode = async (text: string) => {
-    return new Promise<void>(async (resolve) => {
-      try {
-        const res = await fetch('/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: text.replace(/[*_#`]/g, '') })
-        })
-        if (!res.ok) throw new Error('TTS Failed')
-        const blob = await res.blob()
-        if (!isVoiceActiveRef.current) return resolve()
-        
-        const audioUrl = URL.createObjectURL(blob)
-        if (!audioRef.current) audioRef.current = new Audio()
-        
-        audioRef.current.pause()
-        audioRef.current.src = audioUrl
-        audioRef.current.onended = () => resolve()
-        
-        audioRef.current.play().catch((err) => {
-          console.error('Audio playback rejected by browser (autoplay policy/etc):', err)
-          resolve() // Advance the FSM so it doesn't get permanently stuck in speaking mode
-        })
-      } catch (err) {
-        console.error(err)
-        resolve()
+  const playNextInQueue = () => {
+    if (!isVoiceActiveRef.current) {
+      audioQueueRef.current.forEach(url => URL.revokeObjectURL(url));
+      audioQueueRef.current = [];
+      return;
+    }
+
+    if (audioQueueRef.current.length === 0) {
+      isPlayingAudioRef.current = false;
+      return;
+    }
+
+    isPlayingAudioRef.current = true;
+    const audioUrl = audioQueueRef.current.shift()!;
+    
+    if (!audioRef.current) audioRef.current = new Audio();
+    audioRef.current.pause();
+    audioRef.current.src = audioUrl;
+    audioRef.current.onended = () => {
+      URL.revokeObjectURL(audioUrl);
+      playNextInQueue();
+    };
+    audioRef.current.play().catch((err) => {
+      console.error('Audio playback rejected:', err);
+      URL.revokeObjectURL(audioUrl);
+      playNextInQueue();
+    });
+  }
+
+  const enqueueVoiceChunk = async (sentence: string) => {
+    if (!isVoiceActiveRef.current) return;
+    setVoiceState('speaking');
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: sentence.replace(/[*_#`]/g, '').trim() })
+      });
+      if (!res.ok) throw new Error('TTS Failed');
+      const blob = await res.blob();
+      if (!isVoiceActiveRef.current) return;
+      
+      const audioUrl = URL.createObjectURL(blob);
+      audioQueueRef.current.push(audioUrl);
+      
+      if (!isPlayingAudioRef.current) {
+        playNextInQueue();
       }
-    })
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   const toggleFullScreenVoice = (e: React.MouseEvent) => {
@@ -414,6 +441,9 @@ export default function ChatDashboard() {
       audioRef.current.pause()
       audioRef.current.src = ''
     }
+    audioQueueRef.current.forEach(url => URL.revokeObjectURL(url));
+    audioQueueRef.current = [];
+    isPlayingAudioRef.current = false;
     if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current)
   }
 
@@ -514,30 +544,93 @@ export default function ChatDashboard() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMessage] }),
+        body: JSON.stringify({ 
+          messages: [...messages, userMessage],
+          brainrotMode: localStorage.getItem('brainrotMode') !== 'false'
+        }),
         signal: abortController.signal
       })
 
-      const data = await response.json()
-      if (data.message) {
-        setMessages(prev => [...prev, data.message])
-        if (isVoiceMode) {
-          if (!isVoiceActiveRef.current) return
-          setVoiceState('speaking')
-          await playTTSVoiceMode(data.message.content)
-          if (!isVoiceActiveRef.current) return
-          setVoiceState('listening')
+      if (!response.body) throw new Error("No response body");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+
+      let streamingMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: '',
+        timestamp: new Date().toISOString()
+      };
+
+      setMessages(prev => [...prev, streamingMessage]);
+      setIsLoading(false);
+
+      let sentenceBuffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.replace('data: ', '').trim();
+            if (dataStr === '[DONE]') break;
+            if (!dataStr) continue;
+            
+            try {
+              const parsed = JSON.parse(dataStr);
+              if (parsed.meta?.tickers) {
+                streamingMessage.tickers = parsed.meta.tickers;
+                setMessages(prev => prev.map(m => m.id === streamingMessage.id ? { ...streamingMessage } : m));
+              } else if (parsed.text) {
+                streamingMessage.content += parsed.text;
+                setMessages(prev => prev.map(m => m.id === streamingMessage.id ? { ...streamingMessage } : m));
+
+                if (isVoiceMode && isVoiceActiveRef.current) {
+                  sentenceBuffer += parsed.text;
+                  if (/[.!?,;:]\s/.test(sentenceBuffer) || /[.!?,;:]$/.test(sentenceBuffer) || /\n/.test(sentenceBuffer)) {
+                    const match = sentenceBuffer.match(/([\s\S]*?[.!?,;:\n])(?:\s|$)([\s\S]*)/);
+                    if (match) {
+                      const sentence = match[1].trim();
+                      const remainder = match[2] || "";
+                      if (sentence.replace(/[*_#`]/g, '').trim()) {
+                        enqueueVoiceChunk(sentence);
+                      }
+                      sentenceBuffer = remainder;
+                    }
+                  }
+                }
+              }
+            } catch (e) {}
+          }
         }
       }
+      
+      if (isVoiceMode && isVoiceActiveRef.current && sentenceBuffer.trim()) {
+        const cleanFinal = sentenceBuffer.trim().replace(/[*_#`]/g, '');
+        if (cleanFinal) enqueueVoiceChunk(sentenceBuffer.trim());
+      }
+      
+      if (isVoiceMode && isVoiceActiveRef.current) {
+        // Wait gracefully for the entire audio queue to empty before flipping back to listening mode
+        const checkAudioInterval = setInterval(() => {
+          if (!isPlayingAudioRef.current && audioQueueRef.current.length === 0) {
+            clearInterval(checkAudioInterval);
+            if (isVoiceActiveRef.current) setVoiceState('listening');
+          }
+        }, 300);
+      }
+      
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        // If aborted, cleanly remove the orphaned user query from UI
         setMessages(prev => prev.filter(m => m.id !== userMessage.id))
       } else {
         console.error('Failed to send message:', error)
-        if (isVoiceMode) setVoiceState('listening')
+        if (isVoiceMode && isVoiceActiveRef.current) setVoiceState('listening')
       }
-    } finally {
       setIsLoading(false)
     }
   }

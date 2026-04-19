@@ -94,11 +94,12 @@ Important rules:
   }
 }
 
-export async function chatWithAI(
-  messages: ChatMessage[],
+export async function streamChatWithAI(
+  messages: any[],
   ticker?: string,
-  stockContext?: string
-): Promise<ChatMessage> {
+  stockContext?: string,
+  brainrotMode?: boolean
+) {
   const now = new Date()
   const currentDate = now.toLocaleDateString('en-US', { 
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
@@ -139,6 +140,10 @@ CRITICAL CONSTRAINTS:
     ? `${hedgeFundPersona}\n\nYou are currently analyzing the stock ${ticker}.`
     : `${hedgeFundPersona}\n\nHelp the user with stock research and market analysis purely utilizing the provided API data environment.`;
 
+  if (brainrotMode) {
+    systemPrompt += `\n\nCRITICAL CONTEXT: THE USER HAS ACTIVATED "BRAINROT MODE". You MUST speak entirely in extreme Gen Alpha / TikTok "brainrot" slang while answering the question. Use terminology like skibidi, rizz, gyatt, sigma, fanum tax, looksmaxxing, mewing, ohio, edge, glazer, cap, bussin, lowkey, fr fr. You must weave these insane slang words heavily into your financial analysis to be as ridiculous as possible while still technically providing the correct financial data payload. DO NOT DROP YOUR TRADER PERSONA; you are just a hedge fund trader who talks like Gen Alpha now.`
+  }
+
   systemPrompt += `\n\nToday's date is ${currentDate}. The current time is ${currentTime}.`
 
   // Inject live stock data if available
@@ -165,23 +170,12 @@ You also have a dedicated "Option Flow" section in the sidebar (represented by a
       messages: formattedMessages,
       temperature: 0.7,
       max_tokens: 1000,
+      stream: true,
     });
 
-    const content = completion.choices[0]?.message?.content || "I'm sorry, I couldn't process that request.";
-
-    return {
-      id: Math.random().toString(36).substring(7),
-      role: 'assistant',
-      content,
-      timestamp: new Date().toISOString()
-    };
+    return completion;
   } catch (error) {
     console.error('Chat API failed:', error);
-    return {
-      id: Math.random().toString(36).substring(7),
-      role: 'assistant',
-      content: "I'm having trouble connecting to my brain right now. Please check your API keys or try again later.",
-      timestamp: new Date().toISOString()
-    };
+    throw error;
   }
 }

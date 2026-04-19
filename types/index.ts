@@ -28,6 +28,7 @@ export interface ChatMessage {
 export interface ChatRequest {
   messages: ChatMessage[]
   ticker?: string
+  brainrotMode?: boolean
 }
 
 export interface ChatResponse {

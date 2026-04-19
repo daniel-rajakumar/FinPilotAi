@@ -18,7 +18,18 @@ export async function fetchNews(ticker: string): Promise<NewsArticle[]> {
       fetchFinnhub(ticker),
     ])
 
-    const allArticles = [...newsApiArticles, ...finnhubArticles]
+    let allArticles = [...newsApiArticles, ...finnhubArticles]
+    
+    // Strict Post-Processing Validation
+    // If the query is a specific ticker (not 'stock market'), nuke any aggregator articles that don't expressly have the ticker in the headline
+    if (ticker && ticker.toLowerCase() !== 'stock market' && ticker.length <= 5) {
+      const strictArticles = allArticles.filter(a => a.title.toUpperCase().includes(ticker.toUpperCase()))
+      // Fallback to loose matching ONLY if strict matching yields zero results, preventing an empty UI
+      if (strictArticles.length > 0) {
+        allArticles = strictArticles
+      }
+    }
+
     return allArticles.slice(0, 5)
   } catch (error) {
     console.error(`Error fetching news for ${ticker}:`, error)
@@ -41,7 +52,7 @@ async function fetchNewsAPI(ticker: string): Promise<NewsArticle[]> {
       'abcnews.go.com', 'cbsnews.com', 'nbcnews.com', 'usnews.com'
     ].join(',')
 
-    const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(ticker)}&domains=${trustedDomains}&sortBy=publishedAt&pageSize=10&language=en&apiKey=${apiKey}`
+    const url = `https://newsapi.org/v2/everything?qInTitle=${encodeURIComponent(ticker)}&domains=${trustedDomains}&sortBy=publishedAt&pageSize=10&language=en&apiKey=${apiKey}`
     const response = await fetch(url)
 
     if (!response.ok) {

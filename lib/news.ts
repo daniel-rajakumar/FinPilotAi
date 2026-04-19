@@ -13,7 +13,7 @@ export async function getStockNews(ticker: string): Promise<NewsArticle[]> {
     'abcnews.go.com', 'cbsnews.com', 'nbcnews.com', 'usnews.com'
   ].join(',')
 
-  const url = `${NEWS_API_URL}?q=${query}&domains=${trustedDomains}&sortBy=publishedAt&pageSize=20&language=en&apiKey=${NEWS_API_KEY}`
+  const url = `${NEWS_API_URL}?qInTitle=${query}&domains=${trustedDomains}&sortBy=publishedAt&pageSize=20&language=en&apiKey=${NEWS_API_KEY}`
 
   try {
     const response = await fetch(url, { next: { revalidate: 300 } })

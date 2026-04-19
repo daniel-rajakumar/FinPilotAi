@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   BarChart3, MessageSquare, Newspaper, Settings, Landmark,
@@ -10,6 +10,23 @@ import { useTheme } from '@/components/ThemeProvider'
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
+  const [brainrotMode, setBrainrotMode] = useState(true)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('brainrotMode')
+    if (saved === null) {
+      setBrainrotMode(true)
+      localStorage.setItem('brainrotMode', 'true')
+    } else {
+      setBrainrotMode(saved === 'true')
+    }
+  }, [])
+
+  const toggleBrainrot = () => {
+    const newState = !brainrotMode
+    setBrainrotMode(newState)
+    localStorage.setItem('brainrotMode', String(newState))
+  }
 
   return (
     <div className="app-container">
@@ -127,6 +144,16 @@ export default function SettingsPage() {
                   <span className="settings-item-value">Enabled</span>
                 </div>
                 <ChevronRight size={18} className="settings-item-arrow" />
+              </div>
+              
+              <div className="settings-item" onClick={toggleBrainrot} style={{ cursor: 'pointer' }}>
+                <div className="settings-item-info">
+                  <span className="settings-item-label">Brainrot Mode</span>
+                  <span className="settings-item-value">Speak extreme Gen Alpha slang (skibidi, rizz, gyatt)</span>
+                </div>
+                <div className={`toggle-switch ${brainrotMode ? 'active' : ''}`}>
+                  <div className="toggle-knob"></div>
+                </div>
               </div>
             </div>
           </div>

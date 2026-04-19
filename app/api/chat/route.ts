@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chatWithAI } from '@/lib/openai'
+import { streamChatWithAI } from '@/lib/openai'
 import { ChatRequest } from '@/types'
 import { getStockQuote, getStockHistory, formatStockDataForAI } from '@/lib/yfinance'
 import { getStockNews } from '@/lib/news'
@@ -46,7 +46,7 @@ function detectTickers(message: string): string[] {
 export async function POST(request: NextRequest) {
   try {
     const body: ChatRequest = await request.json()
-    const { messages, ticker } = body
+    const { messages, ticker, brainrotMode } = body
 
     if (!messages || messages.length === 0) {
       return NextResponse.json(
@@ -94,13 +94,14 @@ export async function POST(request: NextRequest) {
       const hasMacroKeywords = macroPattern.test(uMessage);
       
       if (hasMacroKeywords) {
-        // Fetch top tier macro indicators
-        const macroSeries = await getMultipleSeries(['FEDFUNDS', 'CPIAUCSL', 'UNRATE']);
+        // Fetch top tier macro indicators matching the Economy Dashboard payload
+        const macroSeries = await getMultipleSeries(Object.keys(DEFAULT_INDICATORS));
         macroDataText = "Latest U.S. Macroeconomic Indicators (from Federal Reserve/FRED):\n";
         
         for (const [id, data] of Object.entries(macroSeries)) {
           if (data && data.observations && data.observations.length > 0) {
-            const latest = data.observations[0];
+            // observations are sorted chronologically, so the latest is the LAST element
+            const latest = data.observations[data.observations.length - 1];
             const meta = DEFAULT_INDICATORS[id];
             macroDataText += `- ${meta.title}: ${latest.value}${meta.units} (as of ${latest.date}). ${meta.description}\n`;
           }
@@ -130,14 +131,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const responseMessage = await chatWithAI(messages, ticker, stockContext)
+    const completionStream = await streamChatWithAI(messages, ticker, stockContext, brainrotMode)
 
-    // Attach detected tickers so frontend can render inline charts
-    if (detectedTickers.length > 0) {
-      responseMessage.tickers = detectedTickers
-    }
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        // 1. Send meta data (detected tickers) first
+        if (detectedTickers.length > 0) {
+          const metaEvent = JSON.stringify({ meta: { tickers: detectedTickers } });
+          controller.enqueue(encoder.encode(`data: ${metaEvent}\n\n`));
+        }
 
-    return NextResponse.json({ message: responseMessage })
+        // 2. Stream AI tokens text payload
+        try {
+          for await (const chunk of completionStream) {
+            const text = chunk.choices?.[0]?.delta?.content || '';
+            if (text) {
+              const textEvent = JSON.stringify({ text });
+              controller.enqueue(encoder.encode(`data: ${textEvent}\n\n`));
+            }
+          }
+        } catch (e) {
+          console.error("Stream generation error:", e);
+        } finally {
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      }
+    })
   } catch (error) {
     console.error('Chat API error:', error)
     return NextResponse.json(
