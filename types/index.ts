@@ -25,6 +25,19 @@ export interface ChatMessage {
   tickers?: string[]  // detected stock tickers for inline charts
 }
 
+export interface ChatSession {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatStore {
+  sessions: ChatSession[]
+  activeSessionId: string | null
+}
+
 export interface ChatRequest {
   messages: ChatMessage[]
   ticker?: string

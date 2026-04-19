@@ -11,14 +11,14 @@ import {
   Aperture,
   TrendingUp,
   TrendingDown,
-  Zap,
   Mic,
   MicOff,
   Volume2,
   Loader2,
-  AudioLines
+  AudioLines,
+  Plus
 } from 'lucide-react'
-import { ChatMessage } from '@/types'
+import { ChatMessage, ChatSession, ChatStore } from '@/types'
 import ReactMarkdown from 'react-markdown'
 import { motion, AnimatePresence } from 'framer-motion'
 import CompanyLogo from '@/components/CompanyLogo'
@@ -49,6 +49,69 @@ const PERIOD_OPTIONS = [
   { label: '1M', days: 30 },
   { label: '3M', days: 90 },
 ]
+
+const MAX_TAB_TITLE_LENGTH = 28
+const CHAT_STORE_KEY = 'finpilot-chat-store'
+
+function createClientId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}
+
+function getSessionTitle(messages: ChatMessage[], fallbackTitle: string) {
+  const firstUserMessage = messages.find((message) => message.role === 'user' && message.content.trim())
+  if (!firstUserMessage) return fallbackTitle
+
+  const normalizedContent = firstUserMessage.content.replace(/\s+/g, ' ').trim()
+  if (normalizedContent.length <= MAX_TAB_TITLE_LENGTH) return normalizedContent
+  return `${normalizedContent.slice(0, MAX_TAB_TITLE_LENGTH - 1).trimEnd()}…`
+}
+
+function isStoredChatMessage(value: unknown): value is ChatMessage {
+  if (!value || typeof value !== 'object') return false
+
+  const candidate = value as ChatMessage
+  return typeof candidate.id === 'string'
+    && typeof candidate.content === 'string'
+    && typeof candidate.timestamp === 'string'
+    && typeof candidate.role === 'string'
+}
+
+function isStoredChatSession(value: unknown): value is ChatSession {
+  if (!value || typeof value !== 'object') return false
+
+  const candidate = value as ChatSession
+  return typeof candidate.id === 'string'
+    && typeof candidate.title === 'string'
+    && typeof candidate.createdAt === 'string'
+    && typeof candidate.updatedAt === 'string'
+    && Array.isArray(candidate.messages)
+    && candidate.messages.every(isStoredChatMessage)
+}
+
+function normalizeStoredChatStore(payload: unknown) {
+  let sessions: ChatSession[] = []
+  let activeSessionId: string | null = null
+
+  if (payload && typeof payload === 'object' && Array.isArray((payload as ChatStore).sessions)) {
+    sessions = (payload as ChatStore).sessions.filter(isStoredChatSession)
+    activeSessionId = typeof (payload as ChatStore).activeSessionId === 'string'
+      ? (payload as ChatStore).activeSessionId
+      : null
+  } else if (Array.isArray(payload) && payload.every(isStoredChatSession)) {
+    sessions = payload
+    activeSessionId = payload[0]?.id ?? null
+  }
+
+  if (sessions.length > 0 && !sessions.some((session) => session.id === activeSessionId)) {
+    activeSessionId = sessions[0].id
+  }
+
+  return { sessions, activeSessionId }
+}
 
 function InlineStockCard({ ticker }: { ticker: string }) {
   const [data, setData] = useState<MiniStockData | null>(null)
@@ -257,7 +320,8 @@ function InlineStockCard({ ticker }: { ticker: string }) {
 }
 
 export default function ChatDashboard() {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isChatHydrated, setIsChatHydrated] = useState(false)
@@ -288,6 +352,105 @@ export default function ChatDashboard() {
   const voiceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const activeSession = sessions.find((session) => session.id === activeSessionId) ?? sessions[0] ?? null
+  const messages = activeSession?.messages ?? []
+
+  const persistStoreToBrowser = useCallback((nextSessions: ChatSession[], nextActiveSessionId: string | null) => {
+    if (typeof window === 'undefined') return
+
+    try {
+      const store: ChatStore = {
+        sessions: nextSessions,
+        activeSessionId: nextActiveSessionId,
+      }
+
+      window.localStorage.setItem(CHAT_STORE_KEY, JSON.stringify(store))
+    } catch (error) {
+      console.error('Failed to persist chat tabs locally:', error)
+    }
+  }, [])
+
+  const createSession = useCallback((index: number, initialMessages: ChatMessage[] = []): ChatSession => {
+    const createdAt = initialMessages[0]?.timestamp ?? new Date().toISOString()
+    const updatedAt = initialMessages[initialMessages.length - 1]?.timestamp ?? createdAt
+
+    return {
+      id: createClientId(),
+      title: getSessionTitle(initialMessages, `Chat ${index}`),
+      messages: initialMessages,
+      createdAt,
+      updatedAt,
+    }
+  }, [])
+
+  const updateSessionMessages = useCallback((sessionId: string, updater: (currentMessages: ChatMessage[]) => ChatMessage[]) => {
+    setSessions((currentSessions) => {
+      const nextSessions = currentSessions.map((session, index) => {
+        if (session.id !== sessionId) return session
+
+        const nextMessages = updater(session.messages)
+        const fallbackTitle = `Chat ${index + 1}`
+        const updatedAt = nextMessages[nextMessages.length - 1]?.timestamp ?? new Date().toISOString()
+
+        return {
+          ...session,
+          messages: nextMessages,
+          title: getSessionTitle(nextMessages, fallbackTitle),
+          updatedAt,
+        }
+      })
+
+      const nextActiveSessionId = activeSessionId && nextSessions.some((session) => session.id === activeSessionId)
+        ? activeSessionId
+        : (nextSessions[0]?.id ?? null)
+
+      persistStoreToBrowser(nextSessions, nextActiveSessionId)
+      return nextSessions
+    })
+  }, [activeSessionId, persistStoreToBrowser])
+
+  const replaceSessionMessage = useCallback((sessionId: string, nextMessage: ChatMessage) => {
+    updateSessionMessages(sessionId, (currentMessages) => currentMessages.map((message) => (
+      message.id === nextMessage.id ? nextMessage : message
+    )))
+  }, [updateSessionMessages])
+
+  const createNewSession = useCallback(() => {
+    const newSession = createSession(sessions.length + 1)
+    const nextSessions = [...sessions, newSession]
+    setSessions(nextSessions)
+    setActiveSessionId(newSession.id)
+    persistStoreToBrowser(nextSessions, newSession.id)
+    setInputValue('')
+  }, [createSession, persistStoreToBrowser, sessions])
+
+  const closeSession = useCallback((sessionId: string) => {
+    const closingIndex = sessions.findIndex((session) => session.id === sessionId)
+    if (closingIndex === -1) return
+
+    const remainingSessions = sessions.filter((session) => session.id !== sessionId)
+
+    if (remainingSessions.length === 0) {
+      const replacementSession = createSession(1)
+      setSessions([replacementSession])
+      setActiveSessionId(replacementSession.id)
+      persistStoreToBrowser([replacementSession], replacementSession.id)
+      setInputValue('')
+      return
+    }
+
+    setSessions(remainingSessions)
+
+    if (activeSessionId === sessionId) {
+      const nextActiveSession = remainingSessions[Math.max(0, closingIndex - 1)] ?? remainingSessions[0]
+      setActiveSessionId(nextActiveSession.id)
+      persistStoreToBrowser(remainingSessions, nextActiveSession.id)
+      setInputValue('')
+      return
+    }
+
+    persistStoreToBrowser(remainingSessions, activeSessionId)
+  }, [activeSessionId, createSession, persistStoreToBrowser, sessions])
 
   const toggleRecording = () => {
     if (isRecording) {
@@ -569,14 +732,21 @@ export default function ChatDashboard() {
 
   // Auto-save history whenever messages change
   useEffect(() => {
-    if (!isChatHydrated) return
+    if (!isChatHydrated || sessions.length === 0) return
+
+    const store: ChatStore = {
+      sessions,
+      activeSessionId,
+    }
+
+    persistStoreToBrowser(sessions, activeSessionId)
 
     fetch('/api/data/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messages)
+      body: JSON.stringify(store)
     }).catch(err => console.error('Failed to auto-save:', err))
-  }, [messages, isChatHydrated])
+  }, [sessions, activeSessionId, isChatHydrated, persistStoreToBrowser])
 
   // Restore saved history when returning to the chat section
   useEffect(() => {
@@ -584,15 +754,57 @@ export default function ChatDashboard() {
 
     const loadSavedChat = async () => {
       try {
-        const res = await fetch('/api/data/chat')
-        if (!res.ok) throw new Error('Failed to load saved chat')
+        let restoredSessions: ChatSession[] = []
+        let restoredActiveSessionId: string | null = null
 
-        const savedMessages = await res.json()
-        if (!cancelled && Array.isArray(savedMessages)) {
-          setMessages((current) => current.length === 0 ? savedMessages : current)
+        try {
+          const rawLocalStore = window.localStorage.getItem(CHAT_STORE_KEY)
+          if (rawLocalStore) {
+            const localStore = normalizeStoredChatStore(JSON.parse(rawLocalStore))
+            restoredSessions = localStore.sessions
+            restoredActiveSessionId = localStore.activeSessionId
+          }
+        } catch (error) {
+          console.error('Failed to read local chat tabs:', error)
+        }
+
+        if (restoredSessions.length === 0) {
+          const res = await fetch('/api/data/chat')
+          if (!res.ok) throw new Error('Failed to load saved chat')
+
+          const savedStore = await res.json()
+          const normalizedStore = normalizeStoredChatStore(savedStore)
+          restoredSessions = normalizedStore.sessions
+          restoredActiveSessionId = normalizedStore.activeSessionId
+
+          if (restoredSessions.length === 0 && Array.isArray(savedStore) && savedStore.every(isStoredChatMessage)) {
+            const legacySession = createSession(1, savedStore)
+            restoredSessions = [legacySession]
+            restoredActiveSessionId = legacySession.id
+          }
+        }
+
+        if (restoredSessions.length === 0) {
+          const initialSession = createSession(1)
+          restoredSessions = [initialSession]
+          restoredActiveSessionId = initialSession.id
+        } else if (!restoredActiveSessionId || !restoredSessions.some((session) => session.id === restoredActiveSessionId)) {
+          restoredActiveSessionId = restoredSessions[0].id
+        }
+
+        if (!cancelled) {
+          setSessions((current) => current.length === 0 ? restoredSessions : current)
+          setActiveSessionId((current) => current ?? restoredActiveSessionId)
+          persistStoreToBrowser(restoredSessions, restoredActiveSessionId)
         }
       } catch (err) {
         console.error('Failed to restore chat history:', err)
+        if (!cancelled) {
+          const initialSession = createSession(1)
+          setSessions((current) => current.length === 0 ? [initialSession] : current)
+          setActiveSessionId((current) => current ?? initialSession.id)
+          persistStoreToBrowser([initialSession], initialSession.id)
+        }
       } finally {
         if (!cancelled) {
           setIsChatHydrated(true)
@@ -605,39 +817,54 @@ export default function ChatDashboard() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [createSession, persistStoreToBrowser])
+
+  useEffect(() => {
+    if (sessions.length === 0) return
+
+    if (!activeSessionId || !sessions.some((session) => session.id === activeSessionId)) {
+      setActiveSessionId(sessions[0].id)
+    }
+  }, [sessions, activeSessionId])
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [activeSessionId, messages])
 
   const handleSend = async (content: string, isVoiceMode = false) => {
-    if (!content.trim() || isLoading) return
+    if (!content.trim() || isLoading || !activeSession) return
+
+    const sessionId = activeSession.id
+    const requestMessages = activeSession.messages
 
     if (chatAbortControllerRef.current) chatAbortControllerRef.current.abort()
     const abortController = new AbortController()
     chatAbortControllerRef.current = abortController
 
     const userMessage: ChatMessage = {
-      id: Date.now().toString(),
+      id: createClientId(),
       role: 'user',
       content,
       timestamp: new Date().toISOString()
     }
 
-    setMessages(prev => [...prev, userMessage])
+    const nextRequestMessages = [...requestMessages, userMessage]
+
+    updateSessionMessages(sessionId, (currentMessages) => [...currentMessages, userMessage])
     setInputValue('')
     setIsLoading(true)
+
+    let streamingMessage: ChatMessage | null = null
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          messages: [...messages, userMessage],
+          messages: nextRequestMessages,
           brainrotMode: localStorage.getItem('brainrotMode') === 'true'
         }),
         signal: abortController.signal
@@ -647,51 +874,59 @@ export default function ChatDashboard() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder("utf-8");
 
-      let streamingMessage: ChatMessage = {
-        id: Date.now().toString(),
+      streamingMessage = {
+        id: createClientId(),
         role: 'assistant',
         content: '',
         timestamp: new Date().toISOString()
-      };
+      }
 
-      setMessages(prev => [...prev, streamingMessage]);
-      setIsLoading(false);
+      updateSessionMessages(sessionId, (currentMessages) => [...currentMessages, streamingMessage as ChatMessage])
+      setIsLoading(false)
 
-      let sentenceBuffer = "";
+      let sentenceBuffer = ""
 
       while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+        const { done, value } = await reader.read()
+        if (done) break
         
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
         
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const dataStr = line.replace('data: ', '').trim();
-            if (dataStr === '[DONE]') break;
-            if (!dataStr) continue;
+            const dataStr = line.replace('data: ', '').trim()
+            if (dataStr === '[DONE]') break
+            if (!dataStr) continue
             
             try {
-              const parsed = JSON.parse(dataStr);
-              if (parsed.meta?.tickers) {
-                streamingMessage.tickers = parsed.meta.tickers;
-                setMessages(prev => prev.map(m => m.id === streamingMessage.id ? { ...streamingMessage } : m));
+              const parsed = JSON.parse(dataStr)
+              if (parsed.meta?.tickers && streamingMessage) {
+                streamingMessage = {
+                  ...streamingMessage,
+                  tickers: parsed.meta.tickers
+                }
+                replaceSessionMessage(sessionId, streamingMessage)
               } else if (parsed.text) {
-                streamingMessage.content += parsed.text;
-                setMessages(prev => prev.map(m => m.id === streamingMessage.id ? { ...streamingMessage } : m));
+                if (!streamingMessage) continue
+
+                streamingMessage = {
+                  ...streamingMessage,
+                  content: streamingMessage.content + parsed.text
+                }
+                replaceSessionMessage(sessionId, streamingMessage)
 
                 if (isVoiceMode && isVoiceActiveRef.current) {
-                  sentenceBuffer += parsed.text;
+                  sentenceBuffer += parsed.text
                   if (/[.!?,;:]\s/.test(sentenceBuffer) || /[.!?,;:]$/.test(sentenceBuffer) || /\n/.test(sentenceBuffer)) {
-                    const match = sentenceBuffer.match(/([\s\S]*?[.!?,;:\n])(?:\s|$)([\s\S]*)/);
+                    const match = sentenceBuffer.match(/([\s\S]*?[.!?,;:\n])(?:\s|$)([\s\S]*)/)
                     if (match) {
-                      const sentence = match[1].trim();
-                      const remainder = match[2] || "";
+                      const sentence = match[1].trim()
+                      const remainder = match[2] || ""
                       if (sentence.replace(/[*_#`]/g, '').trim()) {
-                        enqueueVoiceChunk(sentence);
+                        enqueueVoiceChunk(sentence)
                       }
-                      sentenceBuffer = remainder;
+                      sentenceBuffer = remainder
                     }
                   }
                 }
@@ -710,20 +945,26 @@ export default function ChatDashboard() {
         // Wait gracefully for the entire audio queue to empty before flipping back to listening mode
         const checkAudioInterval = setInterval(() => {
           if (!isPlayingAudioRef.current && audioQueueRef.current.length === 0) {
-            clearInterval(checkAudioInterval);
-            if (isVoiceActiveRef.current) setVoiceState('listening');
+            clearInterval(checkAudioInterval)
+            if (isVoiceActiveRef.current) setVoiceState('listening')
           }
-        }, 300);
+        }, 300)
       }
       
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        setMessages(prev => prev.filter(m => m.id !== userMessage.id))
+        updateSessionMessages(sessionId, (currentMessages) => currentMessages.filter((message) => (
+          message.id !== userMessage.id && message.id !== streamingMessage?.id
+        )))
       } else {
         console.error('Failed to send message:', error)
         if (isVoiceMode && isVoiceActiveRef.current) setVoiceState('listening')
       }
       setIsLoading(false)
+    } finally {
+      if (chatAbortControllerRef.current === abortController) {
+        chatAbortControllerRef.current = null
+      }
     }
   }
 
@@ -737,6 +978,51 @@ export default function ChatDashboard() {
 
       {/* Main Content Area */}
       <main className="main-area">
+        <div className="tabs-container">
+          {sessions.map((session) => {
+            const isActive = session.id === activeSession?.id
+
+            return (
+              <div
+                key={session.id}
+                className={`tab ${isActive ? 'active-tab' : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveSessionId(session.id)}
+                onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    setActiveSessionId(session.id)
+                  }
+                }}
+              >
+                <span className="tab-text">{session.title}</span>
+                <button
+                  type="button"
+                  className="tab-close"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    closeSession(session.id)
+                  }}
+                  aria-label={`Close ${session.title}`}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )
+          })}
+
+          <button
+            type="button"
+            className="tab tab-add"
+            onClick={createNewSession}
+            aria-label="Open a new chat tab"
+            title="New chat"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+
         {/* Chat Window */}
         <div className="chat-window-wrapper">
           <div className="chat-window" ref={scrollRef}>
