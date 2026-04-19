@@ -147,7 +147,7 @@ export default function EconomyPage() {
 
   const fetchMacroQuotes = async () => {
     try {
-      const res = await fetch(`/api/stock/batch?symbols=^TNX,^VIX,DX-Y.NYB,CL=F,GC=F`)
+      const res = await fetch(`/api/stock/batch?symbols=^TNX,^VIX,DX-Y.NYB`)
       const result = await res.json()
       if (result.quotes) {
         setMacroQuotes(result.quotes)
@@ -283,9 +283,7 @@ export default function EconomyPage() {
                         ? (quote.price > 10 ? (quote.price / 10).toFixed(2) : quote.price?.toFixed(2)) + '%' 
                         : quote.symbol === '^VIX' 
                           ? quote.price?.toFixed(2) 
-                          : quote.symbol === 'GC=F' || quote.symbol === 'CL=F'
-                            ? '$' + quote.price?.toFixed(2)
-                            : quote.price?.toFixed(2)}
+                          : quote.price?.toFixed(2)}
                     </span>
                     <span style={{ fontSize: '13px', fontWeight: 600, color: quote.change >= 0 ? 'var(--success)' : 'var(--error)' }}>
                       {quote.change >= 0 ? '+' : ''}{quote.changePercent?.toFixed(2)}%
