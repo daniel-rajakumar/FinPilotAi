@@ -138,10 +138,24 @@ export default function EconomyPage() {
   const [viewAll, setViewAll] = useState(false)
   const [expandedInsight, setExpandedInsight] = useState<string | null>(null)
   const [weekOffset, setWeekOffset] = useState(0)
+  const [macroQuotes, setMacroQuotes] = useState<any[]>([])
 
   useEffect(() => {
     fetchData(false)
+    fetchMacroQuotes()
   }, [])
+
+  const fetchMacroQuotes = async () => {
+    try {
+      const res = await fetch(`/api/stock/batch?symbols=^TNX,^VIX,DX-Y.NYB,CL=F,GC=F`)
+      const result = await res.json()
+      if (result.quotes) {
+        setMacroQuotes(result.quotes)
+      }
+    } catch (err) {
+      console.error('Failed to fetch macro quotes', err)
+    }
+  }
 
   const fetchData = async (all: boolean) => {
     setLoading(true)
@@ -244,6 +258,41 @@ export default function EconomyPage() {
             <div className="econ-error">
               <p>⚠️ {error}</p>
               <p className="econ-error-hint">Make sure FRED_API_KEY is set in .env.local. Get a free key at <a href="https://fred.stlouisfed.org/docs/api/api_key.html" target="_blank">fred.stlouisfed.org</a></p>
+            </div>
+          )}
+
+          {/* ==================== LIVE MACRO BANNER ==================== */}
+          {macroQuotes.length > 0 && (
+            <div style={{
+              display: 'flex', gap: '24px', padding: '16px 24px', margin: '0 0 24px 0',
+              background: 'var(--card-bg)', border: '1px solid var(--card-border)', borderRadius: '16px',
+              overflowX: 'auto', alignItems: 'center', scrollbarWidth: 'none'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: '13px', color: 'var(--text-muted)', borderRight: '1px solid var(--border-color)', paddingRight: '24px', whiteSpace: 'nowrap' }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ef4444', marginRight: '8px', animation: 'pulse-red 2s infinite' }}></span>
+                LIVE MARKETS
+              </div>
+              {macroQuotes.map(quote => (
+                <div key={quote.symbol} style={{ display: 'flex', flexDirection: 'column', minWidth: 'max-content' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 500, marginBottom: '2px' }}>
+                    {quote.name.replace('Futures', '').replace('Index', '').replace('Continuous Contract', '').replace('NYB', '').replace('Treasury Yield 10 Years', '10Y Treasury').trim()}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ fontSize: '16px', color: 'var(--text-main)', fontWeight: 600 }}>
+                      {quote.symbol === '^TNX' 
+                        ? (quote.price > 10 ? (quote.price / 10).toFixed(2) : quote.price?.toFixed(2)) + '%' 
+                        : quote.symbol === '^VIX' 
+                          ? quote.price?.toFixed(2) 
+                          : quote.symbol === 'GC=F' || quote.symbol === 'CL=F'
+                            ? '$' + quote.price?.toFixed(2)
+                            : quote.price?.toFixed(2)}
+                    </span>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: quote.change >= 0 ? 'var(--success)' : 'var(--error)' }}>
+                      {quote.change >= 0 ? '+' : ''}{quote.changePercent?.toFixed(2)}%
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 

@@ -44,9 +44,9 @@ const EARNINGS_CANDIDATES = [...new Set([
 const MARKET_CAP_QUERY_PATTERN = /\b(top|largest|biggest|highest)\b[\s\S]{0,60}\bmarket\s*cap\b|\bmarket\s*cap\b[\s\S]{0,60}\b(top|largest|biggest|highest)\b|\b(top|largest|biggest|highest)\b[\s\S]{0,30}\bmarketcap\b|\bmarketcap\b[\s\S]{0,30}\b(top|largest|biggest|highest)\b/i
 const ANALYSIS_QUERY_PATTERN = /\b(why|because|analysis|analyze|sentiment|impact|compare|versus|vs\.?|news|explain|macro)\b/i
 const HISTORICAL_YEAR_PATTERN = /\b(19|20)\d{2}\b/
-const HISTORICAL_QUERY_PATTERN = /\b(price|trading|stock data|stock price|share price|history|historical|earliest|oldest|first available|how far back)\b/i
+const HISTORICAL_QUERY_PATTERN = /\b(stock price history|share price history|history|historical|earliest|oldest|first available|how far back)\b/i
 const MONTHLY_VOLUME_QUERY_PATTERN = /\b(top|highest|most)\b[\s\S]{0,40}\bvolume\b[\s\S]{0,50}\b(last month|past month|over the last month|30 days|past 30 days|last 30 days)\b|\b(last month|past month|over the last month|30 days|past 30 days|last 30 days)\b[\s\S]{0,50}\b(top|highest|most)\b[\s\S]{0,40}\bvolume\b/i
-const EARNINGS_QUERY_PATTERN = /\b(earning|earnings|report|reporting)\b[\s\S]{0,30}\b(next week|this week|tomorrow|today)\b|\b(next week|this week|tomorrow|today)\b[\s\S]{0,30}\b(earning|earnings|report|reporting)\b/i
+const EARNINGS_QUERY_PATTERN = /\b(earning|earnings|earnings report|financials)\b[\s\S]{0,30}\b(next week|this week|tomorrow|today)\b|\b(next week|this week|tomorrow|today)\b[\s\S]{0,30}\b(earning|earnings|earnings report|financials)\b/i
 
 interface TickerContextResult {
   ticker: string
@@ -616,7 +616,19 @@ export async function POST(request: NextRequest) {
         if (data.observations.length > 0) {
           const latest = data.observations[data.observations.length - 1]
           const meta = DEFAULT_INDICATORS[id]
-          stockContext += `- ${meta.title}: ${latest.value}${meta.units} (as of ${latest.date}). ${meta.description}\n`
+          
+          let printValue = `${latest.value}${meta.units}`
+          
+          // Calculate YoY % for Index data if we have at least 13 observations (1 year of monthly data)
+          if (meta.units.includes('Index') && data.observations.length >= 13) {
+            const yearAgoObs = data.observations[data.observations.length - 13]
+            if (yearAgoObs && yearAgoObs.value && latest.value) {
+              const yoy = ((latest.value / yearAgoObs.value) - 1) * 100
+              printValue = `${latest.value} ${meta.units} (YoY Change: ${yoy.toFixed(2)}%)`
+            }
+          }
+          
+          stockContext += `- ${meta.title}: ${printValue} (as of ${latest.date}). ${meta.description}\n`
         }
       }
       stockContext += "\n"

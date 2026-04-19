@@ -200,21 +200,35 @@ const HISTORICAL_DATA: Record<string, HistoricalEntry> = {
     insightType: 'beat',
   },
   // Future events (no actual yet)
-  'PCE Price Index|2026-04-25': {
+  'Existing Home Sales|2026-04-22': {
+    forecast: '4.15M',
+    previous: '4.38M',
+    actual: null,
+    insight: null,
+    insightType: null,
+  },
+  'Flash Manufacturing & Services PMI|2026-04-23': {
+    forecast: '50.1',
+    previous: '50.3',
+    actual: null,
+    insight: null,
+    insightType: null,
+  },
+  'PCE Price Index|2026-04-24': {
     forecast: '0.2%',
     previous: '0.4%',
     actual: null,
     insight: null,
     insightType: null,
   },
-  'Consumer Confidence|2026-04-29': {
+  'Consumer Confidence|2026-04-28': {
     forecast: '88.0',
     previous: '92.9',
     actual: null,
     insight: null,
     insightType: null,
   },
-  'Initial Jobless Claims|2026-04-24': {
+  'Initial Jobless Claims|2026-04-23': {
     forecast: '220K',
     previous: '215K',
     actual: null,
@@ -490,6 +504,40 @@ const SCHEDULE_RULES: ScheduleRule[] = [
         for (const y of new Set([ws.getFullYear(), we.getFullYear()])) {
           const d = getLastWeekdayOfMonth(y, m, 4)
           if (isInWeek(d, ws, we)) dates.push(d)
+        }
+      }
+      return dates
+    },
+  },
+  {
+    name: 'Existing Home Sales',
+    description: 'Measures sales and prices of existing single-family homes. Key housing market health gauge.',
+    time: '10:00 AM ET', impact: 'medium', icon: '🏠', category: 'Housing', unit: 'M',
+    getOccurrences: (ws, we) => {
+      // Usually around the 21st-23rd of the month
+      const dates: Date[] = []
+      for (const m of new Set([ws.getMonth(), we.getMonth()])) {
+        const y = m === ws.getMonth() ? ws.getFullYear() : we.getFullYear()
+        for (let day = 21; day <= 23; day++) {
+          const d = new Date(y, m, day)
+          if (d.getDay() >= 1 && d.getDay() <= 5 && isInWeek(d, ws, we)) { dates.push(d); break }
+        }
+      }
+      return dates
+    },
+  },
+  {
+    name: 'Flash Manufacturing & Services PMI',
+    description: 'Early estimate of private sector output. High market impact as it leads ISM releases.',
+    time: '9:45 AM ET', impact: 'high', icon: '📈', category: 'Growth', unit: 'Index',
+    getOccurrences: (ws, we) => {
+      // Usually around the 21st-24th
+      const dates: Date[] = []
+      for (const m of new Set([ws.getMonth(), we.getMonth()])) {
+        const y = m === ws.getMonth() ? ws.getFullYear() : we.getFullYear()
+        for (let day = 23; day <= 24; day++) {
+          const d = new Date(y, m, day)
+          if (d.getDay() >= 1 && d.getDay() <= 5 && isInWeek(d, ws, we)) { dates.push(d); break }
         }
       }
       return dates
