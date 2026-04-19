@@ -1,91 +1,172 @@
 # FinPilotAI
 
-FinPilotAI is a multi-page financial intelligence app built with Next.js, React, OpenAI, Yahoo Finance, FRED, NewsAPI, Finnhub, and ElevenLabs. It combines live market data, macroeconomic indicators, news aggregation, options-flow views, and an AI chat assistant into a single product.
+[![Next.js](https://img.shields.io/badge/Next.js-16.2.4-black?logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.2.4-149eca?logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![OpenAI](https://img.shields.io/badge/OpenAI-gpt--4o--mini-412991?logo=openai&logoColor=white)](https://platform.openai.com/)
+[![Yahoo Finance](https://img.shields.io/badge/Data-Yahoo%20Finance-5f01d1)](https://www.npmjs.com/package/yahoo-finance2)
+[![FRED](https://img.shields.io/badge/Data-FRED-2f6fed)](https://fred.stlouisfed.org/)
+[![License](https://img.shields.io/badge/License-Private-lightgrey)](#)
 
-The app is designed to do two different kinds of work:
+FinPilotAI is a multi-page financial intelligence app built with Next.js, React, OpenAI, Yahoo Finance, FRED, NewsAPI, Finnhub, and ElevenLabs. It combines live market data, macro dashboards, news aggregation, options-flow views, and an AI chat assistant into one product.
+
+> [!IMPORTANT]
+> FinPilotAI is not just an LLM wrapper. Several high-value chat queries are answered deterministically from market data before the model is invoked.
+
+> [!NOTE]
+> The current Option Flow page uses mocked snapshot data from `lib/option-flow.ts`, not a real-time external feed.
+
+## Quick Navigation
+
+- [Overview](#overview)
+- [Feature Set](#feature-set)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Pages](#pages)
+- [Chat System](#chat-system)
+- [API Routes](#api-routes)
+- [Environment Variables](#environment-variables)
+- [Local Development](#local-development)
+- [Deployment](#deployment)
+- [Persistence](#persistence)
+- [Known Limitations](#known-limitations)
+- [Project Structure](#project-structure)
+- [Suggested Improvements](#suggested-improvements)
+
+## Overview
+
+FinPilotAI is designed to do two kinds of work:
 
 - deterministic market lookups for questions that should be answered directly from data
-- model-assisted reasoning for interpretation, synthesis, and broader financial analysis
+- model-assisted reasoning for synthesis, interpretation, and broader market explanation
 
-That split is important. FinPilotAI does not rely only on an LLM prompt for every market question. Several high-value chat queries are intercepted server-side and answered directly from Yahoo Finance data before the model is invoked.
+That split matters. Questions like market-cap rankings, historical stock lookups, monthly volume leaderboards, and tracked earnings-calendar queries are handled directly in the backend from Yahoo Finance data instead of being guessed by the model.
 
-## What This Project Includes
+## Feature Set
 
-FinPilotAI currently ships with these user-facing sections:
+### Highlights
 
-- `Chat`: AI financial assistant with streaming responses, ticker detection, inline mini stock cards, voice dictation, voice playback, and multi-tab chat history
-- `Graphs`: sector dashboard with curated sector baskets, sector ETFs, stock charts, and sector-specific news
-- `News`: ticker news search, trending market headlines, and quick market-mover quote cards
-- `Option Flow`: bullish and bearish options-flow dashboard
-- `Economy`: macro dashboard powered by FRED plus a weekly economic calendar
-- `Settings`: theme selection and assistant behavior toggles like Brainrot Mode
+- Streaming AI financial chat with ticker detection
+- Multi-tab chat sessions with persistence across refreshes
+- Inline stock cards inside chat responses
+- Voice dictation and ElevenLabs voice playback
+- Sector graph dashboard with curated stock baskets
+- News search plus trending market headlines
+- Macro dashboard powered by FRED
+- Weekly economic calendar with beat/miss commentary
+- Theme switching and assistant behavior toggles
 
-## Core Product Goals
+<details>
+<summary><strong>What makes the chat assistant more than a prompt wrapper?</strong></summary>
 
-- Provide a fast stock-research workflow for retail-style market questions
-- Blend live financial data with AI interpretation instead of pure text generation
-- Surface useful market pages directly from the sidebar instead of forcing everything into chat
-- Keep the app deployable without a database
+- Direct server-side handlers for:
+  - market-cap leaderboards
+  - monthly volume leaderboards
+  - historical stock price lookups
+  - earliest-history queries
+  - tracked upcoming earnings queries
+  - curated sector stock suggestions
+- Live macro context from FRED
+- Live stock quotes and history from Yahoo Finance
+- News aggregation from multiple providers
+- SSE streaming output back to the browser
+
+</details>
+
+## Architecture
+
+```mermaid
+flowchart LR
+  U["User"] --> UI["Next.js App Router UI"]
+
+  UI --> CHAT["/api/chat"]
+  UI --> NEWS["/api/news"]
+  UI --> STOCK["/api/stock"]
+  UI --> BATCH["/api/stock/batch"]
+  UI --> FREDAPI["/api/fred"]
+  UI --> FLOW["/api/option-flow"]
+  UI --> TTS["/api/tts"]
+  UI --> STORE["/api/data/chat"]
+
+  CHAT --> OPENAI["OpenAI"]
+  CHAT --> YF["Yahoo Finance"]
+  CHAT --> FRED["FRED"]
+  CHAT --> NEWSPROVIDERS["NewsAPI / Finnhub / MarketWatch"]
+  CHAT --> OFLOW["Option Flow Snapshot"]
+
+  NEWS --> NEWSPROVIDERS
+  STOCK --> YF
+  BATCH --> YF
+  FREDAPI --> FRED
+  TTS --> ELEVEN["ElevenLabs"]
+  FLOW --> OFLOW
+  STORE --> FILE["data/chats.json"]
+  UI --> LOCAL["localStorage"]
+```
+
+### Request Model
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant UI as Chat UI
+  participant API as /api/chat
+  participant Data as Market Data Sources
+  participant Model as OpenAI
+
+  User->>UI: Ask financial question
+  UI->>API: Send messages
+  API->>API: Check deterministic handlers
+  alt Direct market-data question
+    API->>Data: Fetch quotes/history/earnings/volume
+    API-->>UI: Stream deterministic response
+  else General reasoning question
+    API->>Data: Build live context
+    API->>Model: Stream chat completion with context
+    Model-->>API: Delta tokens
+    API-->>UI: SSE stream
+  end
+```
 
 ## Tech Stack
 
-### Frontend
+| Layer | Tools |
+| --- | --- |
+| Framework | Next.js 16 App Router |
+| UI | React 19, Framer Motion, Lucide React, React Markdown |
+| Charts | Recharts |
+| AI | OpenAI |
+| Market data | Yahoo Finance |
+| Macro data | FRED |
+| News | NewsAPI, Finnhub, MarketWatch RSS fallback |
+| Voice | ElevenLabs |
+| Persistence | `localStorage` + `data/chats.json` |
 
-- Next.js `16.2.4` with App Router
-- React `19.2.4`
-- TypeScript
-- Framer Motion
-- Recharts
-- Lucide React icons
-- React Markdown
+## Pages
 
-### Data / APIs
+<details open>
+<summary><strong>Chat</strong></summary>
 
-- OpenAI for sentiment analysis and streaming chat
-- Yahoo Finance via `yahoo-finance2` for quotes, history, market-cap ranking, most-actives, earnings timestamps, and charts
-- FRED for macroeconomic series
-- NewsAPI for financial news
-- Finnhub for company news fallback / complement
-- MarketWatch RSS as a fallback source for general market headlines
-- ElevenLabs for text-to-speech playback
+File: [app/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/page.tsx)
 
-### Persistence
+Capabilities:
 
-- Browser `localStorage` for immediate chat-tab persistence
-- Local JSON file storage at `data/chats.json` for saved chat sessions
+- streaming assistant responses
+- ticker detection from plain text, `$TICKER`, and company aliases
+- inline mini stock cards
+- voice dictation via browser speech recognition
+- full-screen voice mode
+- assistant playback via ElevenLabs
+- multi-tab chat history
 
-There is no database in this project.
+</details>
 
-## Product Walkthrough
+<details>
+<summary><strong>Graphs</strong></summary>
 
-### 1. Chat Assistant
+File: [app/graphs/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/graphs/page.tsx)
 
-The chat page lives at [app/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/page.tsx).
-
-Key capabilities:
-
-- streaming assistant responses via Server-Sent Events
-- automatic ticker detection from plain text, `$TICKER`, and common company aliases
-- inline stock cards for referenced tickers
-- voice dictation using the browser speech-recognition API
-- assistant audio playback using ElevenLabs
-- full-screen voice assistant mode with live captioning and active-word spotlighting
-- multi-tab chat sessions at the top of the page
-- chat session persistence across refreshes and section changes
-
-Chat sessions now support:
-
-- multiple concurrent tabs
-- tab titles derived from the first user prompt
-- tab closing with permanent deletion of that session
-- immediate restore after refresh from browser storage
-- server-backed save/load using `data/chats.json`
-
-### 2. Graphs / Sector Dashboard
-
-The Graphs page lives at [app/graphs/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/graphs/page.tsx).
-
-It presents curated sector universes instead of trying to model the entire market:
+Covers curated sector universes:
 
 - Technology
 - Consumer Goods
@@ -94,92 +175,90 @@ It presents curated sector universes instead of trying to model the entire marke
 - Semiconductors
 - Energy
 
-For each sector, the page uses a representative ETF and a hand-picked basket of stocks. It also pulls sector-linked news by mapping each sector to a representative ticker.
+Each sector has:
 
-### 3. News
+- representative ETF
+- selected stock basket
+- sector-specific news
+- chart views and comparative data
 
-The News page lives at [app/news/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/news/page.tsx).
+</details>
 
-It supports:
+<details>
+<summary><strong>News</strong></summary>
 
-- ticker-specific news search
-- trending market news on initial load
-- quick quote cards for market movers
-- trending ticker chips
-- normalized date formatting
-- fallback handling when timestamps are missing or malformed
+File: [app/news/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/news/page.tsx)
 
-General market news requests use fallback logic so the page can still populate when paid news keys are missing.
+Includes:
 
-### 4. Option Flow
+- ticker news search
+- trending market headlines
+- market mover quote strip
+- normalized timestamp formatting
+- fallback behavior for general market news
 
-The Option Flow page lives at [app/options/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/options/page.tsx).
+</details>
 
-It shows:
+<details>
+<summary><strong>Option Flow</strong></summary>
 
-- Top 5 Bullish Names
-- Top 5 Bearish Names
-- sentiment-confidence badges
-- premium, trade count, current price, and change
+File: [app/options/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/options/page.tsx)
 
-Important: the current option-flow source is not a live external integration. The data is a mocked snapshot returned from [lib/option-flow.ts](/Users/danielrajakumar/code/FinPilotAi/lib/option-flow.ts) and labeled in code as a static implementation based on a dated market snapshot.
+Shows:
 
-### 5. Economy
+- top bullish names
+- top bearish names
+- premium, confidence, trade count, and price data
 
-The Economy page lives at [app/economy/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/economy/page.tsx).
+> [!WARNING]
+> The data source is currently a static snapshot returned from [lib/option-flow.ts](/Users/danielrajakumar/code/FinPilotAi/lib/option-flow.ts).
 
-It combines:
+</details>
 
-- default FRED dashboard indicators
-- extended “View All” macro indicators
-- weekly economic calendar data
-- forecast / previous / actual / beat-miss commentary
-- live banner for macro-related market instruments
+<details>
+<summary><strong>Economy</strong></summary>
 
-Default FRED indicators:
+File: [app/economy/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/economy/page.tsx)
 
-- `FEDFUNDS` - Interest Rate
-- `CPIAUCSL` - Inflation (CPI)
-- `DGS10` - 10-Year Bonds
-- `UNRATE` - Unemployment Rate
-- `IPMAN` - PMI proxy via manufacturing production
-- `PAYEMS` - Non-Farm Payrolls
+Includes:
 
-Extended indicators include GDP, M2, PPI, 2Y yield, yield curve, USD/EUR, housing, consumer sentiment, JOLTS, and VIX.
+- default FRED macro indicators
+- extended “View All” macro series
+- weekly economic calendar
+- beat/miss inline analysis
+- live macro banner
 
-The economic calendar logic is implemented locally in [lib/econ-calendar.ts](/Users/danielrajakumar/code/FinPilotAi/lib/econ-calendar.ts) with forecast/previous/actual metadata and future scheduled releases.
+Default indicators:
 
-### 6. Settings
+- `FEDFUNDS`
+- `CPIAUCSL`
+- `DGS10`
+- `UNRATE`
+- `IPMAN`
+- `PAYEMS`
 
-The Settings page lives at [app/settings/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/settings/page.tsx).
+</details>
 
-It currently supports:
+<details>
+<summary><strong>Settings</strong></summary>
 
-- light theme
-- dark theme
-- theme persistence using `localStorage`
-- Brainrot Mode toggle for chat behavior
+File: [app/settings/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/settings/page.tsx)
 
-Brainrot Mode defaults to `false`.
+Includes:
 
-## How Chat Works
+- light / dark theme
+- persistent theme selection
+- Brainrot Mode toggle
 
-The main chat route lives at [app/api/chat/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/chat/route.ts).
+</details>
 
-This route does not blindly forward every question to OpenAI.
+## Chat System
 
-### Deterministic Chat Handlers
+Main route: [app/api/chat/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/chat/route.ts)
 
-Before invoking the model, the server checks whether the user asked one of several structured questions that should be answered from data:
+### Deterministic Handlers
 
-- top companies by market cap
-- tracked stocks reporting earnings next week
-- top volume leaders over the last month
-- historical stock price questions
-- earliest available history questions
-- sector stock suggestions from the app’s tracked sector universe
-
-Examples of prompts that are handled directly:
+Before hitting OpenAI, the backend checks for structured prompts such as:
 
 - `top 5 companies by market cap right now`
 - `what stocks are reporting earnings next week`
@@ -188,229 +267,209 @@ Examples of prompts that are handled directly:
 - `what is the earliest stock data you have`
 - `suggest me good stocks in semiconductor sector`
 
-These responses are built from Yahoo Finance quote/history data and streamed back as SSE text events.
+These are answered directly from Yahoo Finance data.
 
-### Model-Assisted Chat Path
+### Model-Assisted Path
 
-If the prompt is not caught by a deterministic handler, the route builds a live context payload and streams the question to OpenAI using [lib/openai.ts](/Users/danielrajakumar/code/FinPilotAi/lib/openai.ts).
+If the prompt is not caught by a deterministic route, `/api/chat` builds a live context payload and streams the request to OpenAI.
 
-The context payload can include:
+The context can include:
 
-- default FRED macro indicators
-- option-flow summary
+- FRED macro indicators
 - general market news
-- one or more detected ticker quotes
-- ticker price history
+- ticker quotes
+- ticker history
 - ticker news
-
-The model persona is intentionally opinionated:
-
-- hedge-fund analyst framing
-- emphasis on causal explanation
-- explicit “What smart money is doing” and “What could go wrong” sections
-- required sentiment / risk / conviction footer
+- option-flow summary
 
 ### Ticker Detection
 
-Ticker detection in chat uses:
+Ticker detection uses:
 
 - a curated ticker allowlist
-- `$AAPL`-style mentions
-- upper-case token scanning
-- company-name aliases such as Apple -> `AAPL`, Google -> `GOOGL`, Tesla -> `TSLA`
-
-## Data Sources and Their Roles
-
-### Yahoo Finance
-
-Implemented in [lib/yfinance.ts](/Users/danielrajakumar/code/FinPilotAi/lib/yfinance.ts).
-
-Used for:
-
-- real-time quotes
-- quote batches
-- historical price series
-- market-cap ranking
-- most-active stock universe
-- 30-day volume calculations
-- earnings timestamps
-
-Main exported helpers:
-
-- `getStockQuote`
-- `getStockQuotes`
-- `getStockHistory`
-- `getStockHistoryRange`
-- `getMostActiveStocks`
-- `getStockVolumeStats`
-- `formatStockDataForAI`
-
-### FRED
-
-Implemented in [lib/fred.ts](/Users/danielrajakumar/code/FinPilotAi/lib/fred.ts).
-
-Used for:
-
-- single macro series
-- default dashboard series
-- extended dashboard series
-- macro context in chat
-
-Main exported helpers:
-
-- `getFredSeries`
-- `getMultipleSeries`
-- `DEFAULT_INDICATORS`
-- `ALL_INDICATORS`
-
-### NewsAPI / Finnhub / MarketWatch
-
-Implemented mainly in [lib/finance-news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/finance-news.ts) and [lib/news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/news.ts).
-
-Two different news paths exist:
-
-- `lib/news.ts` for chat/news-analysis style stock news queries
-- `lib/finance-news.ts` for the News page and general market headline aggregation
-
-`finance-news.ts` does the heavier lifting:
-
-- merges NewsAPI and Finnhub results
-- filters to trusted sources
-- normalizes timestamps from ISO strings, Unix seconds, or Unix milliseconds
-- falls back to MarketWatch top-stories RSS for general market news when API-backed sources are unavailable
-
-### OpenAI
-
-Implemented in [lib/openai.ts](/Users/danielrajakumar/code/FinPilotAi/lib/openai.ts).
-
-Used for:
-
-- structured sentiment analysis in `/api/analyze`
-- streaming chat completions in `/api/chat`
-
-Current model usage:
-
-- `gpt-4o-mini` for JSON analysis
-- `gpt-4o-mini` for streaming chat
-
-### ElevenLabs
-
-Used by [app/api/tts/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/tts/route.ts).
-
-Used for:
-
-- assistant message playback
-- voice mode audio generation
-
-Voice configuration in code:
-
-- Voice ID: `pNInz6obpgDQGcFmaJgB`
-- model: `eleven_turbo_v2_5`
+- `$AAPL` syntax
+- all-caps token extraction
+- alias mapping such as:
+  - Apple -> `AAPL`
+  - Google / Alphabet -> `GOOGL`
+  - Tesla -> `TSLA`
+  - Nvidia -> `NVDA`
 
 ## API Routes
 
-### `POST /api/chat`
+| Route | Method | Purpose |
+| --- | --- | --- |
+| `/api/chat` | `POST` | Streaming AI chat and deterministic market-data answers |
+| `/api/analyze` | `POST` | Structured news sentiment analysis for a ticker |
+| `/api/news` | `GET` | News aggregation for a ticker or general market query |
+| `/api/fred` | `GET` | Single or multiple FRED series |
+| `/api/stock` | `GET` | Quote + history for one symbol |
+| `/api/stock/batch` | `GET` | Batch quote endpoint |
+| `/api/option-flow` | `GET` | Option-flow dataset |
+| `/api/tts` | `POST` | ElevenLabs speech generation |
+| `/api/data/chat` | `GET` / `POST` | Chat persistence |
+| `/api/test-news` | `GET` | NewsAPI debug route |
 
-Primary chat endpoint.
+<details>
+<summary><strong>API route notes</strong></summary>
 
-Behavior:
+- `/api/chat` returns `text/event-stream`
+- `/api/news` returns `{ ticker, articles }`
+- `/api/stock` returns `{ quote, history }`
+- `/api/data/chat` normalizes legacy single-chat payloads into session-based storage
 
-- accepts chat history and optional ticker
-- resolves direct market-data questions where possible
-- otherwise builds live market context and streams model output
-- returns `text/event-stream`
+</details>
 
-### `POST /api/analyze`
+## Data Sources
 
-News-analysis endpoint for a ticker.
+| Source | File | Used For |
+| --- | --- | --- |
+| Yahoo Finance | [lib/yfinance.ts](/Users/danielrajakumar/code/FinPilotAi/lib/yfinance.ts) | Quotes, history, earnings timestamps, screeners, market-cap logic |
+| FRED | [lib/fred.ts](/Users/danielrajakumar/code/FinPilotAi/lib/fred.ts) | Macro indicators |
+| NewsAPI | [lib/news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/news.ts), [lib/finance-news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/finance-news.ts) | News articles |
+| Finnhub | [lib/finance-news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/finance-news.ts) | Company news |
+| MarketWatch RSS | [lib/finance-news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/finance-news.ts) | Trending-market news fallback |
+| OpenAI | [lib/openai.ts](/Users/danielrajakumar/code/FinPilotAi/lib/openai.ts) | Analysis + streaming chat |
+| ElevenLabs | [app/api/tts/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/tts/route.ts) | Voice playback |
+| Local snapshot | [lib/option-flow.ts](/Users/danielrajakumar/code/FinPilotAi/lib/option-flow.ts) | Option-flow page |
 
-Behavior:
+## Environment Variables
 
-- validates ticker format
-- fetches stock news
-- runs OpenAI JSON analysis
-- returns structured sentiment / explanation / prediction
+> [!TIP]
+> The current `.env.example` is incomplete relative to the codebase. Use the full set below.
 
-### `GET /api/news?ticker=...`
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `OPENAI_API_KEY` | Yes | Chat and analysis |
+| `NEWS_API_KEY` | Recommended | NewsAPI lookups |
+| `FINNHUB_API_KEY` | Recommended | Finnhub company news |
+| `FRED_API_KEY` | Yes for Economy page | FRED series fetches |
+| `ELEVEN_LABS_API_KEY` | Yes for voice features | ElevenLabs TTS |
 
-News aggregation endpoint for the News page.
+```bash
+OPENAI_API_KEY=your_openai_api_key_here
+NEWS_API_KEY=your_newsapi_key_here
+FINNHUB_API_KEY=your_finnhub_api_key_here
+FRED_API_KEY=your_fred_api_key_here
+ELEVEN_LABS_API_KEY=your_elevenlabs_api_key_here
+```
 
-Behavior:
+## Local Development
 
-- fetches ticker-specific or general-market articles
-- uses normalized article shapes
-- returns `{ ticker, articles }`
+### Setup
 
-### `GET /api/fred`
+```bash
+npm install
+cp .env.example .env.local
+```
 
-Macro data endpoint.
+Add the missing environment variables shown above, then run:
 
-Supported modes:
+```bash
+npm run dev
+```
 
-- `?series=SERIES_ID`
-- `?all=true`
-- `?viewAll=true`
+Open:
 
-### `GET /api/stock?symbol=...&period=...`
+- [http://localhost:3000](http://localhost:3000)
 
-Single-stock quote plus chart history endpoint.
+### Available Scripts
 
-Returns:
+```bash
+npm run dev
+npm run build
+npm run start
+npm run lint
+```
 
-- `quote`
-- `history`
+## Deployment
 
-### `GET /api/stock/batch?symbols=AAPL,MSFT,...`
+This project is deployable on Vercel without a database.
 
-Batch quote endpoint.
+### Vercel Checklist
 
-Used for:
+1. Create the Vercel project
+2. Add env vars:
+   - `OPENAI_API_KEY`
+   - `NEWS_API_KEY`
+   - `FINNHUB_API_KEY`
+   - `FRED_API_KEY`
+   - `ELEVEN_LABS_API_KEY`
+3. Redeploy after changing env vars
 
-- macro banner
-- quote strips
-- leaderboard calculations
+> [!NOTE]
+> The repo includes [next.config.ts](/Users/danielrajakumar/code/FinPilotAi/next.config.ts) with `allowedDevOrigins` configured for `10.29.13.9`.
 
-### `GET /api/option-flow`
+## Persistence
 
-Returns option-flow dashboard data.
+Chat state uses two layers:
 
-Current behavior:
+### Browser layer
 
-- serves static mocked snapshot data from `lib/option-flow.ts`
+- `localStorage` key: `finpilot-chat-store`
+- `localStorage` key: `brainrotMode`
+- `localStorage` key: `finpilot-theme`
 
-### `POST /api/tts`
+### Filesystem layer
 
-Text-to-speech endpoint.
+- [data/chats.json](/Users/danielrajakumar/code/FinPilotAi/data/chats.json)
 
-Behavior:
+Session shape:
 
-- accepts `{ text }`
-- calls ElevenLabs
-- returns `audio/mpeg`
+```json
+{
+  "sessions": [
+    {
+      "id": "uuid",
+      "title": "Chat title",
+      "messages": [],
+      "createdAt": "ISO timestamp",
+      "updatedAt": "ISO timestamp"
+    }
+  ],
+  "activeSessionId": "uuid"
+}
+```
 
-### `GET /api/data/chat`
+## What Is Live vs. What Is Static
 
-Chat persistence endpoint.
+### Live / runtime-fetched
 
-Behavior:
+- stock quotes
+- stock history
+- batch quotes
+- earnings timestamps
+- most-active screener results
+- FRED macro data
+- NewsAPI articles
+- Finnhub company news
+- MarketWatch RSS fallback
+- OpenAI responses
+- ElevenLabs audio
 
-- reads from `data/chats.json`
-- normalizes legacy single-chat payloads into session-based storage
+### Static / mocked / curated
 
-### `POST /api/data/chat`
+- option-flow leaderboard data in [lib/option-flow.ts](/Users/danielrajakumar/code/FinPilotAi/lib/option-flow.ts)
+- economic calendar schedule and historical entries in [lib/econ-calendar.ts](/Users/danielrajakumar/code/FinPilotAi/lib/econ-calendar.ts)
+- sector universes in `app/graphs/page.tsx` and `app/api/chat/route.ts`
+- candidate universes for some leaderboard handlers
 
-Chat persistence save endpoint.
+## Known Limitations
 
-Behavior:
+> [!WARNING]
+> This project is strong as a product prototype, but some parts are still intentionally simple.
 
-- accepts session-based chat store
-- writes to `data/chats.json`
+<details open>
+<summary><strong>Current constraints</strong></summary>
 
-### `GET /api/test-news`
+- Option Flow is not a real live provider integration yet
+- Sector universes are curated, not exhaustive
+- Some leaderboard handlers rank from a practical candidate universe, not a full-market census
+- Voice dictation depends on browser speech-recognition support
+- `data/chats.json` is not a multi-user persistence design
+- News quality degrades when news keys are missing
 
-Diagnostic route for checking NewsAPI connectivity and payloads.
-
-This is a development/debug route.
+</details>
 
 ## Project Structure
 
@@ -449,285 +508,42 @@ FinPilotAi/
 
 ## Important Files
 
-### Product Shell
-
-- [app/layout.tsx](/Users/danielrajakumar/code/FinPilotAi/app/layout.tsx): app metadata, font load, initial theme script
-- [app/globals.css](/Users/danielrajakumar/code/FinPilotAi/app/globals.css): global layout and all main styling
-- [components/AppSidebar.tsx](/Users/danielrajakumar/code/FinPilotAi/components/AppSidebar.tsx): shared sidebar navigation
-- [components/PageHeaderIcon.tsx](/Users/danielrajakumar/code/FinPilotAi/components/PageHeaderIcon.tsx): shared page-header icon style
-- [components/ThemeProvider.tsx](/Users/danielrajakumar/code/FinPilotAi/components/ThemeProvider.tsx): theme context and persistence
-
-### Chat + Persistence
-
-- [app/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/page.tsx): chat UI, multi-tab sessions, voice mode, TTS, inline stock cards
-- [app/api/chat/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/chat/route.ts): chat orchestration and deterministic handlers
-- [app/api/data/chat/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/data/chat/route.ts): server-side chat save/load
-- [data/chats.json](/Users/danielrajakumar/code/FinPilotAi/data/chats.json): current file-backed chat store
-
-### Market / Macro / News
-
-- [lib/yfinance.ts](/Users/danielrajakumar/code/FinPilotAi/lib/yfinance.ts): Yahoo Finance data layer
-- [lib/fred.ts](/Users/danielrajakumar/code/FinPilotAi/lib/fred.ts): FRED data layer
-- [lib/finance-news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/finance-news.ts): News page aggregation and fallback logic
-- [lib/news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/news.ts): chat/news-analysis news fetcher
-- [lib/option-flow.ts](/Users/danielrajakumar/code/FinPilotAi/lib/option-flow.ts): option-flow snapshot data
-- [lib/econ-calendar.ts](/Users/danielrajakumar/code/FinPilotAi/lib/econ-calendar.ts): macro calendar schedule and insights
-
-## Environment Variables
-
-The code currently references these environment variables:
-
-| Variable | Required | Used For |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | Yes for chat + analysis | OpenAI completions in `lib/openai.ts` |
-| `NEWS_API_KEY` | Optional but strongly recommended | NewsAPI lookups in `lib/news.ts`, `lib/finance-news.ts`, and `/api/test-news` |
-| `FINNHUB_API_KEY` | Optional but recommended | Finnhub company-news fallback/complement in `lib/finance-news.ts` |
-| `FRED_API_KEY` | Yes for economy dashboard | FRED series fetches in `lib/fred.ts` |
-| `ELEVEN_LABS_API_KEY` | Required for voice playback | ElevenLabs TTS route |
-
-The current `.env.example` is incomplete relative to the codebase. A real local `.env.local` should look more like this:
-
-```bash
-OPENAI_API_KEY=your_openai_api_key_here
-NEWS_API_KEY=your_newsapi_key_here
-FINNHUB_API_KEY=your_finnhub_api_key_here
-FRED_API_KEY=your_fred_api_key_here
-ELEVEN_LABS_API_KEY=your_elevenlabs_api_key_here
-```
-
-## Local Development
-
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Create environment file
-
-```bash
-cp .env.example .env.local
-```
-
-Then add the missing variables documented above.
-
-### 3. Start the dev server
-
-```bash
-npm run dev
-```
-
-### 4. Open the app
-
-By default:
-
-- [http://localhost:3000](http://localhost:3000)
-
-The repo also includes a custom dev origin allowlist in [next.config.ts](/Users/danielrajakumar/code/FinPilotAi/next.config.ts) for `10.29.13.9`.
-
-## Deployment
-
-This project is deployable on Vercel without any database setup.
-
-### Required deployment steps
-
-1. Create the Vercel project
-2. Add environment variables in the Vercel dashboard
-3. Redeploy after changing environment variables
-
-Suggested Vercel environment variables:
-
-- `OPENAI_API_KEY`
-- `NEWS_API_KEY`
-- `FINNHUB_API_KEY`
-- `FRED_API_KEY`
-- `ELEVEN_LABS_API_KEY`
-
-## Persistence Model
-
-Chat persistence is split across two layers:
-
-### Browser layer
-
-Used for immediate restore on refresh:
-
-- `localStorage` key: `finpilot-chat-store`
-- `localStorage` key: `brainrotMode`
-- `localStorage` key: `finpilot-theme`
-
-### Server / filesystem layer
-
-Used for saved chat state across browser sessions on the same deployment:
-
-- file: [data/chats.json](/Users/danielrajakumar/code/FinPilotAi/data/chats.json)
-
-Chat storage format is session-based:
-
-```json
-{
-  "sessions": [
-    {
-      "id": "uuid",
-      "title": "Chat title",
-      "messages": [],
-      "createdAt": "ISO timestamp",
-      "updatedAt": "ISO timestamp"
-    }
-  ],
-  "activeSessionId": "uuid"
-}
-```
-
-## Design Notes
-
-- Shared sidebar is implemented once and reused across all pages
-- Shared page-header icon badges keep page headers visually consistent
-- Scroll behavior is fixed at the app-shell level so long pages remain scrollable
-- The app supports both light and dark themes
-
-## What Is Live vs. What Is Not
-
-### Live / fetched at runtime
-
-- stock quotes
-- stock history
-- batch quotes
-- most-active screener results
-- earnings timestamps
-- FRED macro data
-- NewsAPI articles
-- Finnhub company news
-- MarketWatch RSS fallback
-- OpenAI responses
-- ElevenLabs speech audio
-
-### Static / mocked / hand-maintained
-
-- option-flow leaderboard data in `lib/option-flow.ts`
-- economic calendar schedule and historical forecast/actual entries in `lib/econ-calendar.ts`
-- sector stock universes in `app/graphs/page.tsx` and `app/api/chat/route.ts`
-- market-cap candidate set and earnings candidate set used for some direct chat handlers
-
-## Known Limitations and Caveats
-
-### 1. Option Flow Is Not Truly Live
-
-The Option Flow page markets itself as live unusual-flow analysis, but the actual implementation currently returns static mocked data. This is the most important product caveat in the repo.
-
-### 2. Sector Universes Are Curated, Not Exhaustive
-
-Sector suggestions and graphs operate on a hand-picked stock list, not on every listed company in a sector.
-
-### 3. Market-Cap and Volume Leaderboards Are Universe-Limited
-
-Some direct handlers rank from a practical Yahoo-driven candidate set rather than a full market census.
-
-### 4. Voice Mode Needs Browser Support
-
-Voice dictation depends on the browser speech-recognition API. Browsers without `SpeechRecognition` or `webkitSpeechRecognition` support will not support dictation.
-
-### 5. File-Based Persistence Is Simple, Not Multi-User
-
-`data/chats.json` is suitable for local or simple single-instance deployment. It is not a multi-user database design.
-
-### 6. News Quality Depends on Available Keys
-
-Without `NEWS_API_KEY` and `FINNHUB_API_KEY`, some news experiences degrade to fallback behavior.
-
-## Developer Notes
-
-### Scripts
-
-```bash
-npm run dev
-npm run build
-npm run start
-npm run lint
-```
-
-### Type Definitions
-
-Shared app types live in [types/index.ts](/Users/danielrajakumar/code/FinPilotAi/types/index.ts).
-
-Notable types:
-
-- `NewsArticle`
-- `AnalysisResult`
-- `ChatMessage`
-- `ChatSession`
-- `ChatStore`
-
-### Styling
-
-The project uses:
-
-- one large global stylesheet at [app/globals.css](/Users/danielrajakumar/code/FinPilotAi/app/globals.css)
-- inline JSX styles in some pages, especially `app/options/page.tsx`
-
-### Navigation
-
-Sidebar items are currently:
-
-- Graphs
-- Chat
-- News
-- Option Flow
-- Economy
-- Settings
+| Area | File |
+| --- | --- |
+| Main chat UI | [app/page.tsx](/Users/danielrajakumar/code/FinPilotAi/app/page.tsx) |
+| Chat orchestration | [app/api/chat/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/chat/route.ts) |
+| Chat persistence | [app/api/data/chat/route.ts](/Users/danielrajakumar/code/FinPilotAi/app/api/data/chat/route.ts) |
+| Market data layer | [lib/yfinance.ts](/Users/danielrajakumar/code/FinPilotAi/lib/yfinance.ts) |
+| Macro data layer | [lib/fred.ts](/Users/danielrajakumar/code/FinPilotAi/lib/fred.ts) |
+| News aggregation | [lib/finance-news.ts](/Users/danielrajakumar/code/FinPilotAi/lib/finance-news.ts) |
+| OpenAI integration | [lib/openai.ts](/Users/danielrajakumar/code/FinPilotAi/lib/openai.ts) |
+| Sidebar shell | [components/AppSidebar.tsx](/Users/danielrajakumar/code/FinPilotAi/components/AppSidebar.tsx) |
+| Theme provider | [components/ThemeProvider.tsx](/Users/danielrajakumar/code/FinPilotAi/components/ThemeProvider.tsx) |
 
 ## Suggested Improvements
 
-If you continue developing this project, the highest-value next steps are:
+- Replace mocked option-flow data with a real provider
+- Update `.env.example` so it matches the actual codebase
+- Move file-based chat persistence to a per-user database
+- Centralize duplicated sector definitions
+- Add tests for deterministic chat handlers
+- Add monitoring for upstream API failures
+- Break large page files into smaller components
 
-- replace mocked option-flow data with a real provider
-- upgrade `.env.example` to match the actual required keys
-- move file-based chat storage to a proper per-user database
-- centralize sector definitions instead of duplicating them across pages and chat handlers
-- add tests for deterministic chat handler routes
-- add monitoring around upstream API failures
-- separate large inline UI blocks in `app/page.tsx`, `app/graphs/page.tsx`, and `app/economy/page.tsx` into smaller components
+## Status
 
-## Quick Start Summary
+FinPilotAI is already usable as a financial dashboard and AI market copilot. Its strongest traits are:
 
-If you want the shortest path to running the app locally:
-
-```bash
-npm install
-cp .env.example .env.local
-```
-
-Then set:
-
-```bash
-OPENAI_API_KEY=...
-NEWS_API_KEY=...
-FINNHUB_API_KEY=...
-FRED_API_KEY=...
-ELEVEN_LABS_API_KEY=...
-```
-
-Then run:
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-## Current Status
-
-FinPilotAI is already a usable financial dashboard and AI assistant, but it is best described as a strong prototype / product foundation rather than a fully normalized production platform. Its strongest traits are:
-
-- fast product iteration
-- good page coverage for market workflows
-- practical use of live Yahoo/FRED/news data
-- direct-handler logic for several high-value chat questions
+- live market and macro data integration
+- deterministic handling for several important chat prompts
+- coherent multi-page product design
+- practical local deployability
 
 Its biggest architectural weaknesses are:
 
 - file-based persistence
-- partially static data sources
-- duplicated domain configuration in multiple files
-- limited formal testing
+- mocked option-flow data
+- duplicated domain configuration
+- minimal formal test coverage
 
-That said, the project is coherent, deployable, and materially more capable than a simple “LLM wrapper” because it combines data APIs, deterministic financial logic, and a purpose-built UI.
+Even with those limitations, the project is materially more capable than a plain chatbot because it combines UI, live APIs, deterministic data logic, and LLM reasoning in a single workflow.
