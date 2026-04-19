@@ -28,9 +28,9 @@ export async function fetchNews(ticker: string): Promise<NewsArticle[]> {
 
 async function fetchNewsAPI(ticker: string): Promise<NewsArticle[]> {
   try {
-    const apiKey = process.env.NEWSAPI_KEY
+    const apiKey = process.env.NEWS_API_KEY
     if (!apiKey) {
-      console.warn('NEWSAPI_KEY not configured')
+      console.warn('NEWS_API_KEY not configured')
       return []
     }
 
@@ -69,9 +69,9 @@ async function fetchNewsAPI(ticker: string): Promise<NewsArticle[]> {
 
 async function fetchFinnhub(ticker: string): Promise<NewsArticle[]> {
   try {
-    const apiKey = process.env.FINNHUB_KEY
+    const apiKey = process.env.FINNHUB_API_KEY
     if (!apiKey) {
-      console.warn('FINNHUB_KEY not configured')
+      console.warn('FINNHUB_API_KEY not configured')
       return []
     }
 
@@ -84,7 +84,7 @@ async function fetchFinnhub(ticker: string): Promise<NewsArticle[]> {
     const toDate = endDate.toISOString().split('T')[0] // YYYY-MM-DD
 
     const url = `https://finnhub.io/api/v1/company-news?symbol=${encodeURIComponent(ticker)}&from=${fromDate}&to=${toDate}&token=${apiKey}`
-    const response = await fetch(url)
+    const response = await fetch(url, { next: { revalidate: 300 } })
 
     if (!response.ok) {
       throw new Error(`Finnhub responded with status ${response.status}`)

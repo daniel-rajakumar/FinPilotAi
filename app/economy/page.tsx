@@ -224,6 +224,9 @@ export default function EconomyPage() {
           <Link href="/news" className="icon-btn" title="News">
             <Newspaper size={22} strokeWidth={1.5} />
           </Link>
+          <Link href="/options" className="icon-btn" title="Option Flow">
+            <Zap size={22} strokeWidth={1.5} />
+          </Link>
           <Link href="/economy" className="icon-btn active" title="Economy">
             <div className="active-bg">
               <Landmark size={22} strokeWidth={1.5} />

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { chatWithAI } from '@/lib/openai'
 import { ChatRequest } from '@/types'
 import { getStockQuote, getStockHistory, formatStockDataForAI } from '@/lib/yfinance'
+import { getStockNews } from '@/lib/news'
+import { getMultipleSeries, DEFAULT_INDICATORS } from '@/lib/fred'
+import { getOptionFlow } from '@/lib/option-flow'
 
 // Common stock tickers to detect in user messages
 const TICKER_PATTERN = /\b([A-Z]{1,5})\b/g
@@ -62,18 +65,68 @@ export async function POST(request: NextRequest) {
     let stockContext = ''
     if (detectedTickers.length > 0) {
       const dataPromises = detectedTickers.map(async (t) => {
-        const [quote, history] = await Promise.all([
+        const [quote, history, news] = await Promise.all([
           getStockQuote(t),
           getStockHistory(t),
+          getStockNews(t)
         ])
+        
+        let contextText = ''
         if (quote) {
-          return formatStockDataForAI(quote, history)
+          contextText += formatStockDataForAI(quote, history)
         }
-        return null
+        
+        if (news && news.length > 0) {
+          contextText += `\n\nLatest News for ${t}:\n` + news.map(n => `- ${n.title} (${n.source})`).join('\n')
+        }
+        
+        return contextText || null
       })
 
       const results = await Promise.all(dataPromises)
       stockContext = results.filter(Boolean).join('\n\n')
+    } else {
+      let macroDataText = '';
+      const uMessage = latestMessage.content.toLowerCase();
+
+      // Ensure we check for macroeconomic concepts first
+      const hasMacroKeywords = uMessage.includes('interest rate') || uMessage.includes('inflation') || uMessage.includes('cpi') || uMessage.includes('unemployment') || uMessage.includes('economy') || uMessage.includes('fed');
+      
+      if (hasMacroKeywords) {
+        // Fetch top tier macro indicators
+        const macroSeries = await getMultipleSeries(['FEDFUNDS', 'CPIAUCSL', 'UNRATE']);
+        macroDataText = "Latest U.S. Macroeconomic Indicators (from Federal Reserve/FRED):\n";
+        
+        for (const [id, data] of Object.entries(macroSeries)) {
+          if (data && data.observations && data.observations.length > 0) {
+            const latest = data.observations[0];
+            const meta = DEFAULT_INDICATORS[id];
+            macroDataText += `- ${meta.title}: ${latest.value}${meta.units} (as of ${latest.date}). ${meta.description}\n`;
+          }
+        }
+        stockContext += macroDataText + "\n";
+      }
+
+      // Check if user is asking for general market news without specifying a ticker
+      if (uMessage.includes('news') || uMessage.includes('market') || uMessage.includes('today')) {
+         const generalNews = await getStockNews('stock market OR Wall Street')
+         if (generalNews && generalNews.length > 0) {
+           stockContext += `\nLatest General Market News:\n` + generalNews.map(n => `- ${n.title} (${n.source}) - ${n.description}`).join('\n')
+         }
+      }
+
+      // Check if user is asking for bullish/bearish names or option flow
+      const isAskingForFlow = uMessage.includes('bullish') || uMessage.includes('bearish') || uMessage.includes('option flow') || uMessage.includes('flow');
+      if (isAskingForFlow) {
+        try {
+          const optionFlow = await getOptionFlow()
+          stockContext += `\n\nLatest Option Flow Summary (from OptionStrat):\n`
+          stockContext += `Top Bullish: ${optionFlow.topBullish.map(t => `${t.symbol} (${t.premium} premium, ${Math.round(t.sentimentScore*100)}% confidence)`).join(', ')}\n`
+          stockContext += `Top Bearish: ${optionFlow.topBearish.map(t => `${t.symbol} (${t.premium} premium, ${Math.round(t.sentimentScore*100)}% confidence)`).join(', ')}\n`
+        } catch (e) {
+          console.error("Failed to fetch option flow for context", e)
+        }
+      }
     }
 
     const responseMessage = await chatWithAI(messages, ticker, stockContext)

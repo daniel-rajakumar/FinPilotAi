@@ -16,10 +16,18 @@ import {
   Send,
   Aperture,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Zap,
+  Mic,
+  MicOff,
+  Volume2,
+  Loader2,
+  AudioLines
 } from 'lucide-react'
 import { ChatMessage } from '@/types'
 import ReactMarkdown from 'react-markdown'
+import { motion, AnimatePresence } from 'framer-motion'
+import CompanyLogo from '@/components/CompanyLogo'
 
 interface MiniStockData {
   quote: {
@@ -108,9 +116,10 @@ function InlineStockCard({ ticker }: { ticker: string }) {
       </div>
 
       <div className="isc-header">
-        <div className="isc-info">
+        <div className="isc-title-area" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <CompanyLogo symbol={data.quote.symbol} size={28} />
           <span className="isc-symbol">{data.quote.symbol}</span>
-          <span className="isc-name">{data.quote.name}</span>
+          <span className="isc-name">{data.quote.name || 'Unknown Company'}</span>
         </div>
         <div className="isc-price-block">
           <span className="isc-price">${data.quote.price.toFixed(2)}</span>
@@ -252,7 +261,218 @@ export default function ChatDashboard() {
   const [inputValue, setInputValue] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   
+  // Voice states
+  const [isRecording, setIsRecording] = useState(false)
+  const recognitionRef = useRef<any>(null)
+  
+  // TTS states
+  const [playingTTSMessageId, setPlayingTTSMessageId] = useState<string | null>(null)
+  const [ttsLoadingId, setTtsLoadingId] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Full Screen Voice states
+  const [isFullScreenVoice, setIsFullScreenVoice] = useState(false)
+  const isVoiceActiveRef = useRef(false)
+  const chatAbortControllerRef = useRef<AbortController | null>(null)
+  const [voiceOrigin, setVoiceOrigin] = useState({ x: '50%', y: '85%' })
+  const [voiceState, setVoiceState] = useState<'idle' | 'listening' | 'thinking' | 'speaking'>('idle')
+  const [voiceTranscript, setVoiceTranscript] = useState('')
+  const voiceTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      if (recognitionRef.current) recognitionRef.current.stop()
+      setIsRecording(false)
+      return
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert("Your browser does not support the Web Speech API. Please try Chrome or Safari.")
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = true
+
+    recognition.onstart = () => setIsRecording(true)
+    recognition.onend = () => setIsRecording(false)
+    recognition.onerror = () => setIsRecording(false)
+
+    // Save initial value to append
+    const startValue = inputValue
+
+    recognition.onresult = (event: any) => {
+      let currentTrans = ''
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        currentTrans += event.results[i][0].transcript
+      }
+      setInputValue((startValue ? startValue + ' ' : '') + currentTrans)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
+  const playTTS = async (text: string, messageId: string) => {
+    if (playingTTSMessageId === messageId && audioRef.current) {
+      audioRef.current.pause()
+      setPlayingTTSMessageId(null)
+      return
+    }
+    try {
+      setTtsLoadingId(messageId)
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // strip markdown from text so elevenlabs doesn't speak asterisks
+        body: JSON.stringify({ text: text.replace(/[*_#`]/g, '') })
+      })
+      if (!res.ok) throw new Error('TTS Failed')
+      const blob = await res.blob()
+      const audioUrl = URL.createObjectURL(blob)
+      if (audioRef.current) audioRef.current.pause()
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+      audio.onplay = () => {
+        setTtsLoadingId(null)
+        setPlayingTTSMessageId(messageId)
+      }
+      audio.onended = () => setPlayingTTSMessageId(null)
+      audio.play()
+    } catch (err) {
+      console.error(err)
+      setTtsLoadingId(null)
+    }
+  }
+
+  const playTTSVoiceMode = async (text: string) => {
+    return new Promise<void>(async (resolve) => {
+      try {
+        const res = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text.replace(/[*_#`]/g, '') })
+        })
+        if (!res.ok) throw new Error('TTS Failed')
+        const blob = await res.blob()
+        if (!isVoiceActiveRef.current) return resolve()
+        
+        const audioUrl = URL.createObjectURL(blob)
+        if (!audioRef.current) audioRef.current = new Audio()
+        
+        audioRef.current.pause()
+        audioRef.current.src = audioUrl
+        audioRef.current.onended = () => resolve()
+        
+        audioRef.current.play().catch((err) => {
+          console.error('Audio playback rejected by browser (autoplay policy/etc):', err)
+          resolve() // Advance the FSM so it doesn't get permanently stuck in speaking mode
+        })
+      } catch (err) {
+        console.error(err)
+        resolve()
+      }
+    })
+  }
+
+  const toggleFullScreenVoice = (e: React.MouseEvent) => {
+    // Unlock the browser's audio context synchronously during this trusted user click event
+    if (!audioRef.current) {
+      audioRef.current = new Audio()
+    }
+    // Play a tiny, silent base64 WAV file to bypass Safari/Chrome async autoplay restrictions
+    audioRef.current.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"
+    audioRef.current.play().catch(() => {})
+
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    const x = rect.left + rect.width / 2
+    const y = rect.top + rect.height / 2
+    setVoiceOrigin({ x: `${x}px`, y: `${y}px` })
+    setIsFullScreenVoice(true)
+    isVoiceActiveRef.current = true
+    setVoiceState('listening')
+  }
+
+  const closeFullScreenVoice = () => {
+    setIsFullScreenVoice(false)
+    isVoiceActiveRef.current = false
+    setVoiceState('idle')
+    setIsLoading(false)
+    
+    // Hard-cancel any pending ChatGPT text generation streams!
+    if (chatAbortControllerRef.current) {
+      chatAbortControllerRef.current.abort()
+      chatAbortControllerRef.current = null
+    }
+
+    if (recognitionRef.current) recognitionRef.current.stop()
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+    }
+    if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current)
+  }
+
+  // Voice Interaction Orchestrator Loop
+  useEffect(() => {
+    if (!isFullScreenVoice || voiceState !== 'listening') return
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+       alert('Speech Recognition unsupported')
+       return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+
+    let localTranscript = ''
+
+    recognition.onstart = () => setVoiceTranscript('')
+
+    recognition.onresult = (event: any) => {
+      if (!isVoiceActiveRef.current) return // Prevent final stop() from queuing zombie fetch timeouts
+      
+      let finalStr = ''
+      let interimStr = ''
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) finalStr += event.results[i][0].transcript
+        else interimStr += event.results[i][0].transcript
+      }
+      localTranscript = finalStr + interimStr
+      setVoiceTranscript(localTranscript)
+
+      if (voiceTimeoutRef.current) clearTimeout(voiceTimeoutRef.current)
+      
+      voiceTimeoutRef.current = setTimeout(() => {
+         recognition.stop()
+         if (localTranscript.trim()) {
+           setVoiceState('thinking')
+           handleSend(localTranscript, true)
+         } else {
+           setVoiceState('idle') 
+           setTimeout(() => setVoiceState('listening'), 50)
+         }
+      }, 2000)
+    }
+
+    recognition.onerror = () => {
+       setVoiceState('idle')
+       setTimeout(() => setVoiceState('listening'), 500)
+    }
+
+    recognitionRef.current = recognition
+    recognition.start()
+
+    return () => {
+      recognition.stop()
+    }
+  }, [isFullScreenVoice, voiceState])
 
   // Auto-save history whenever messages change
   useEffect(() => {
@@ -272,8 +492,12 @@ export default function ChatDashboard() {
     }
   }, [messages])
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, isVoiceMode = false) => {
     if (!content.trim() || isLoading) return
+
+    if (chatAbortControllerRef.current) chatAbortControllerRef.current.abort()
+    const abortController = new AbortController()
+    chatAbortControllerRef.current = abortController
 
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
@@ -290,15 +514,29 @@ export default function ChatDashboard() {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [...messages, userMessage] })
+        body: JSON.stringify({ messages: [...messages, userMessage] }),
+        signal: abortController.signal
       })
 
       const data = await response.json()
       if (data.message) {
         setMessages(prev => [...prev, data.message])
+        if (isVoiceMode) {
+          if (!isVoiceActiveRef.current) return
+          setVoiceState('speaking')
+          await playTTSVoiceMode(data.message.content)
+          if (!isVoiceActiveRef.current) return
+          setVoiceState('listening')
+        }
       }
-    } catch (error) {
-      console.error('Failed to send message:', error)
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        // If aborted, cleanly remove the orphaned user query from UI
+        setMessages(prev => prev.filter(m => m.id !== userMessage.id))
+      } else {
+        console.error('Failed to send message:', error)
+        if (isVoiceMode) setVoiceState('listening')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -324,6 +562,9 @@ export default function ChatDashboard() {
           <Link href="/news" className="icon-btn" title="News">
             <Newspaper size={22} strokeWidth={1.5} />
           </Link>
+          <Link href="/options" className="icon-btn" title="Option Flow">
+            <Zap size={22} strokeWidth={1.5} />
+          </Link>
           <Link href="/economy" className="icon-btn" title="Economy">
             <Landmark size={22} strokeWidth={1.5} />
           </Link>
@@ -343,22 +584,6 @@ export default function ChatDashboard() {
 
       {/* Main Content Area */}
       <main className="main-area">
-        {/* Top Tabs - Same as before */}
-        <div className="tabs-container">
-          <div className="tab active-tab">
-            <span className="tab-text">New Chat</span>
-            <X size={14} className="tab-close" />
-          </div>
-          <div className="tab">
-            <span className="tab-text">The Roman Empire</span>
-            <X size={14} className="tab-close" />
-          </div>
-          <div className="tab">
-            <span className="tab-text">Effects of the French Revolution</span>
-            <X size={14} className="tab-close" />
-          </div>
-        </div>
-
         {/* Chat Window */}
         <div className="chat-window-wrapper">
           <div className="chat-window" ref={scrollRef}>
@@ -395,7 +620,18 @@ export default function ChatDashboard() {
                     )}
                     <div className="message-bubble">
                       {m.role === 'assistant' ? (
-                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                        <div style={{ position: 'relative' }}>
+                          <ReactMarkdown>{m.content}</ReactMarkdown>
+                          <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button 
+                              className={`tts-btn ${playingTTSMessageId === m.id ? 'playing' : ''}`}
+                              onClick={() => playTTS(m.content, m.id)}
+                              title={playingTTSMessageId === m.id ? "Stop Audio" : "Play Audio"}
+                            >
+                              {ttsLoadingId === m.id ? <Loader2 size={16} className="spin" /> : <Volume2 size={16} />}
+                            </button>
+                          </div>
+                        </div>
                       ) : (
                         <p>{m.content}</p>
                       )}
@@ -415,7 +651,7 @@ export default function ChatDashboard() {
             )}
 
             {/* Input Area */}
-            <div className="input-area-container">
+            <div className="input-area-container" style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <form 
                 onSubmit={(e) => { e.preventDefault(); handleSend(inputValue); }}
                 className="input-wrapper"
@@ -428,14 +664,72 @@ export default function ChatDashboard() {
                   onChange={(e) => setInputValue(e.target.value)}
                   disabled={isLoading}
                 />
+                <button 
+                  type="button" 
+                  className={`mic-btn ${isRecording ? 'recording' : ''}`}
+                  onClick={toggleRecording}
+                  title="Voice Input Dictation"
+                >
+                  {isRecording ? <MicOff size={18} strokeWidth={1.5} /> : <Mic size={18} strokeWidth={1.5} color="#7b8390" />}
+                </button>
                 <button type="submit" className="send-btn" disabled={!inputValue.trim() || isLoading}>
                   <Send size={18} strokeWidth={1.5} color={inputValue.trim() ? "#1c1c1e" : "#7b8390"} />
                 </button>
               </form>
+              
+              <button 
+                type="button" 
+                className="voice-hero-btn"
+                onClick={toggleFullScreenVoice}
+                title="Full Screen Voice Assistant"
+              >
+                <AudioLines size={22} strokeWidth={2} color="#fff" />
+              </button>
             </div>
           </div>
         </div>
       </main>
+
+      {/* FULL SCREEN VOICE OVERLAY */}
+      <AnimatePresence>
+        {isFullScreenVoice && (
+          <motion.div 
+            className="voice-mode-overlay"
+            initial={{ 
+              clipPath: `circle(0px at ${voiceOrigin.x} ${voiceOrigin.y})`,
+              opacity: 1
+            }}
+            animate={{ 
+              clipPath: `circle(150vw at ${voiceOrigin.x} ${voiceOrigin.y})`,
+              opacity: 1
+            }}
+            exit={{ 
+              clipPath: `circle(0px at ${voiceOrigin.x} ${voiceOrigin.y})`,
+              opacity: 0
+            }}
+            transition={{ duration: 1.0, ease: [0.22, 1, 0.36, 1] }}
+          >
+            <button className="voice-mode-close" onClick={closeFullScreenVoice}>
+              <X size={24} />
+            </button>
+            
+            <div className="voice-orb-container">
+              <div className={`voice-orb ${voiceState}`}></div>
+              <div className="voice-status-text">
+                {voiceState}
+                {voiceState === 'listening' ? '...' : ''}
+                {voiceState === 'thinking' ? '...' : ''}
+                {voiceState === 'speaking' ? '...' : ''}
+              </div>
+            </div>
+
+            <div className="voice-transcript">
+              {voiceState === 'listening' ? voiceTranscript : ''}
+              {voiceState === 'speaking' && messages.length > 0 ? messages[messages.length - 1].content : ''}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

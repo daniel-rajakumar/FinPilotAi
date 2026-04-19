@@ -7,6 +7,7 @@ import {
   Newspaper, ExternalLink, Clock, Search,
   TrendingUp, TrendingDown, Flame, Zap
 } from 'lucide-react'
+import CompanyLogo from '@/components/CompanyLogo'
 
 interface NewsArticle {
   title: string
@@ -159,6 +160,9 @@ export default function NewsPage() {
               <Newspaper size={22} strokeWidth={1.5} />
             </div>
           </Link>
+          <Link href="/options" className="icon-btn" title="Option Flow">
+            <Zap size={22} strokeWidth={1.5} />
+          </Link>
           <Link href="/economy" className="icon-btn" title="Economy">
             <Landmark size={22} strokeWidth={1.5} />
           </Link>
@@ -212,7 +216,9 @@ export default function NewsPage() {
                 key={t}
                 onClick={() => { setTicker(t); fetchNews(t); }}
                 className={`news-ticker-chip ${activeTicker === t ? 'active' : ''}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
               >
+                <CompanyLogo symbol={t} size={14} />
                 {t}
               </button>
             ))}
@@ -239,7 +245,10 @@ export default function NewsPage() {
                   ) : (
                     <>
                       <div className="mover-top">
-                        <span className="mover-symbol">{q.symbol}</span>
+                        <span className="mover-symbol" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <CompanyLogo symbol={q.symbol} size={16} />
+                          {q.symbol}
+                        </span>
                         <span className={`mover-badge ${q.change >= 0 ? 'up' : 'down'}`}>
                           {q.change >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
                           {q.change >= 0 ? '+' : ''}{q.changePercent.toFixed(1)}%

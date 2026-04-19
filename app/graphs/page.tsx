@@ -9,9 +9,10 @@ import {
 import {
   BarChart3, MessageSquare, Newspaper, Settings, Landmark,
   ArrowLeft, Cpu, ShoppingBag, Banknote, HeartPulse, CircuitBoard, Flame,
-  TrendingUp, TrendingDown, ExternalLink, Clock
+  TrendingUp, TrendingDown, ExternalLink, Clock, Zap
 } from 'lucide-react'
 import { StockQuote } from '@/lib/yfinance'
+import CompanyLogo from '@/components/CompanyLogo'
 
 interface StockHistory {
   date: string
@@ -34,6 +35,7 @@ interface Sector {
   icon: React.ReactNode
   color: string
   gradient: string
+  etf: string
   stocks: SectorStock[]
 }
 
@@ -44,6 +46,7 @@ const SECTORS: Sector[] = [
     icon: <Cpu size={24} />,
     color: '#6366f1',
     gradient: 'linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%)',
+    etf: 'XLK',
     stocks: [
       { symbol: 'AAPL', name: 'Apple Inc.' },
       { symbol: 'MSFT', name: 'Microsoft Corp.' },
@@ -59,6 +62,7 @@ const SECTORS: Sector[] = [
     icon: <ShoppingBag size={24} />,
     color: '#f59e0b',
     gradient: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)',
+    etf: 'XLY',
     stocks: [
       { symbol: 'AMZN', name: 'Amazon.com' },
       { symbol: 'TSLA', name: 'Tesla Inc.' },
@@ -74,6 +78,7 @@ const SECTORS: Sector[] = [
     icon: <Banknote size={24} />,
     color: '#10b981',
     gradient: 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+    etf: 'XLF',
     stocks: [
       { symbol: 'JPM', name: 'JPMorgan Chase' },
       { symbol: 'BAC', name: 'Bank of America' },
@@ -89,6 +94,7 @@ const SECTORS: Sector[] = [
     icon: <HeartPulse size={24} />,
     color: '#ef4444',
     gradient: 'linear-gradient(135deg, #fef2f2 0%, #fecaca 100%)',
+    etf: 'XLV',
     stocks: [
       { symbol: 'JNJ', name: 'Johnson & Johnson' },
       { symbol: 'UNH', name: 'UnitedHealth Group' },
@@ -104,6 +110,7 @@ const SECTORS: Sector[] = [
     icon: <CircuitBoard size={24} />,
     color: '#8b5cf6',
     gradient: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+    etf: 'SMH',
     stocks: [
       { symbol: 'NVDA', name: 'NVIDIA Corp.' },
       { symbol: 'AMD', name: 'Advanced Micro Devices' },
@@ -119,6 +126,7 @@ const SECTORS: Sector[] = [
     icon: <Flame size={24} />,
     color: '#f97316',
     gradient: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)',
+    etf: 'XLE',
     stocks: [
       { symbol: 'XOM', name: 'Exxon Mobil' },
       { symbol: 'CVX', name: 'Chevron Corp.' },
@@ -132,12 +140,12 @@ const SECTORS: Sector[] = [
 
 // Search query map for better sector-specific news results
 const SECTOR_NEWS_QUERIES: Record<string, string> = {
-  'Technology': 'technology stocks AAPL MSFT GOOGL',
-  'Consumer Goods': 'consumer stocks Amazon Tesla retail',
-  'Finance': 'financial stocks banks JPMorgan Goldman Sachs',
-  'Healthcare': 'healthcare stocks pharmaceutical biotech',
-  'Semiconductors': 'semiconductor stocks NVDA AMD chip AI',
-  'Energy': 'energy stocks oil gas Exxon Chevron',
+  'Technology': 'AAPL',
+  'Consumer Goods': 'AMZN',
+  'Finance': 'JPM',
+  'Healthcare': 'UNH',
+  'Semiconductors': 'NVDA',
+  'Energy': 'XOM',
 }
 
 interface NewsArticle {
@@ -210,10 +218,13 @@ function SectorNews({ sectorName, sectorColor }: { sectorName: string; sectorCol
           {articles.map((article, i) => (
             <a
               key={i}
-              href={article.url}
-              target="_blank"
+              href={article.url !== '#' ? article.url : undefined}
+              onClick={(e) => {
+                if (article.url === '#') e.preventDefault()
+              }}
+              target={article.url !== '#' ? "_blank" : undefined}
               rel="noopener noreferrer"
-              className="sector-news-card"
+              className={`sector-news-card ${article.url === '#' ? 'cursor-default' : ''}`}
               style={{ '--sector-accent': sectorColor } as React.CSSProperties}
             >
               {article.urlToImage && (
@@ -248,6 +259,27 @@ export default function GraphsPage() {
   const [data, setData] = useState<StockData | null>(null)
   const [loading, setLoading] = useState(false)
   const [ticker, setTicker] = useState('')
+  const [sectorPerf, setSectorPerf] = useState<Record<string, number | null>>({})
+
+  useEffect(() => {
+    const fetchSectors = async () => {
+      const results = await Promise.allSettled(
+        SECTORS.map(async (s) => {
+          const res = await fetch(`/api/stock?symbol=${s.etf}&period=1`)
+          const data = await res.json()
+          return { id: s.id, changePercent: data.quote?.changePercent ?? null }
+        })
+      )
+      const perf: Record<string, number | null> = {}
+      results.forEach((r) => {
+        if (r.status === 'fulfilled') {
+          perf[r.value.id] = r.value.changePercent
+        }
+      })
+      setSectorPerf(perf)
+    }
+    fetchSectors()
+  }, [])
 
   const fetchStock = useCallback(async (symbol: string, name: string, days: number = period) => {
     if (!symbol.trim()) return
@@ -307,6 +339,9 @@ export default function GraphsPage() {
           </Link>
           <Link href="/news" className="icon-btn" title="News">
             <Newspaper size={22} strokeWidth={1.5} />
+          </Link>
+          <Link href="/options" className="icon-btn" title="Option Flow">
+            <Zap size={22} strokeWidth={1.5} />
           </Link>
           <Link href="/economy" className="icon-btn" title="Economy">
             <Landmark size={22} strokeWidth={1.5} />
@@ -386,11 +421,32 @@ export default function GraphsPage() {
                   </div>
                   <div className="sector-info">
                     <span className="sector-name">{sector.name}</span>
-                    <span className="sector-count">{sector.stocks.length} stocks</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                      <span className="sector-count">{sector.stocks.length} stocks</span>
+                      {sectorPerf[sector.id] !== undefined && sectorPerf[sector.id] !== null && (
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          color: sectorPerf[sector.id]! >= 0 ? 'var(--success)' : 'var(--error)',
+                          backgroundColor: sectorPerf[sector.id]! >= 0 ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '2px'
+                        }}>
+                          {sectorPerf[sector.id]! >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                          {sectorPerf[sector.id]! >= 0 ? 'Good' : 'Bad'} ({sectorPerf[sector.id]! > 0 ? '+' : ''}{sectorPerf[sector.id]!.toFixed(2)}%)
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="sector-tickers">
                     {sector.stocks.slice(0, 3).map(s => (
-                      <span key={s.symbol} className="sector-ticker-chip">{s.symbol}</span>
+                      <span key={s.symbol} className="sector-ticker-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <CompanyLogo symbol={s.symbol} size={14} />
+                        {s.symbol}
+                      </span>
                     ))}
                     {sector.stocks.length > 3 && (
                       <span className="sector-ticker-chip more">+{sector.stocks.length - 3}</span>
@@ -412,7 +468,10 @@ export default function GraphsPage() {
                     style={{ '--sector-color': activeSector.color } as React.CSSProperties}
                     onClick={() => { setTicker(stock.symbol); fetchStock(stock.symbol, stock.name); }}
                   >
-                    <div className="sector-stock-symbol">{stock.symbol}</div>
+                    <div className="sector-stock-symbol" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CompanyLogo symbol={stock.symbol} size={20} />
+                      {stock.symbol}
+                    </div>
                     <div className="sector-stock-name">{stock.name}</div>
                     <div className="sector-stock-action">View Chart →</div>
                   </button>
@@ -437,8 +496,11 @@ export default function GraphsPage() {
             <div className="stock-card">
               {/* Stock Header */}
               <div className="stock-card-header">
-                <div className="stock-info">
-                  <h2 className="stock-name">{data.quote.name}</h2>
+                <div className="stock-info" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <CompanyLogo symbol={data.quote.symbol} size={28} />
+                    <h2 className="stock-name" style={{ margin: 0 }}>{data.quote.name}</h2>
+                  </div>
                   <span className="stock-symbol">{data.quote.symbol}</span>
                 </div>
                 <div className="stock-price-block">

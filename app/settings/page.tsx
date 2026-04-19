@@ -4,7 +4,7 @@ import React from 'react'
 import Link from 'next/link'
 import {
   BarChart3, MessageSquare, Newspaper, Settings, Landmark,
-  Sun, Moon, Monitor, ChevronRight
+  Sun, Moon, Monitor, ChevronRight, Zap
 } from 'lucide-react'
 import { useTheme } from '@/components/ThemeProvider'
 
@@ -24,6 +24,9 @@ export default function SettingsPage() {
           </Link>
           <Link href="/news" className="icon-btn" title="News">
             <Newspaper size={22} strokeWidth={1.5} />
+          </Link>
+          <Link href="/options" className="icon-btn" title="Option Flow">
+            <Zap size={22} strokeWidth={1.5} />
           </Link>
           <Link href="/economy" className="icon-btn" title="Economy">
             <Landmark size={22} strokeWidth={1.5} />
