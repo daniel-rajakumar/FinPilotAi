@@ -10,13 +10,13 @@ import PageHeaderIcon from '@/components/PageHeaderIcon'
 
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme()
-  const [brainrotMode, setBrainrotMode] = useState(true)
+  const [brainrotMode, setBrainrotMode] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('brainrotMode')
     if (saved === null) {
-      setBrainrotMode(true)
-      localStorage.setItem('brainrotMode', 'true')
+      setBrainrotMode(false)
+      localStorage.setItem('brainrotMode', 'false')
     } else {
       setBrainrotMode(saved === 'true')
     }

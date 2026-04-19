@@ -608,7 +608,7 @@ export default function ChatDashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           messages: [...messages, userMessage],
-          brainrotMode: localStorage.getItem('brainrotMode') !== 'false'
+          brainrotMode: localStorage.getItem('brainrotMode') === 'true'
         }),
         signal: abortController.signal
       })
